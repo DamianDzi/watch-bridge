@@ -5,3 +5,4 @@ build/
 DerivedData/
 node_modules/
 .env*
+.claude/worktrees/
