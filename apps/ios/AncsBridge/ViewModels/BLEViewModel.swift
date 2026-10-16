@@ -29,6 +29,14 @@ class BLEViewModel: ObservableObject {
                 self?.objectWillChange.send()
             }
             .store(in: &cancellables)
+
+        // Health sync stats drive the Health Sync card
+        peripheralManager.healthSyncManager.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
     }
 
     func toggleAdvertising() {

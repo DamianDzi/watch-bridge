@@ -10,6 +10,8 @@ targets:
     platform: iOS
     sources:
       - AncsBridge
+    capabilities:
+      healthkit: true
     info:
       path: AncsBridge/Info-Generated.plist
       properties:

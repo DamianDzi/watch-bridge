@@ -49,6 +49,8 @@ Copy `third_party/WearBridge/{wearos-app,ios-app}` → `apps/wearos`, `apps/ios`
 
 1. Watch collects → Room. 2. Link up (existing reconnect) → HELLO(cursor). 3. Batches + ACKs until cursor current. 4. Ongoing: flush-on-insert with a short debounce; nothing real-time-critical. Outage (AC2/AC3): collection continues, flush happens on reconnect.
 
+> **Protocol update 2026-10-16 (phase 2):** the byte-level wire format is now authoritatively defined in `specs/health-ble-protocol.md` — every record payload begins with a `u64 record_id`, iOS ACKs the contiguous prefix of successfully saved record IDs (≤ 63 per ACK), and iOS replies TIME_SYNC to HELLO. The framing sketch above is superseded by that file wherever they differ. **Both codecs must match that file byte-for-byte.**
+
 ## Media control (greenfield #2, phase 2b)
 
 iOS auto-exposes AMS (`89D3502B-0F55-4C87-94A9-4FEE378E005F`) to bonded accessories. Watch side only: AMS client — Remote Command (`…E2` write: play/pause/next/prev/volume), Track (`…B3` notify: artist/title/duration), Entity Update (`…B4` subscribe: player/queue). No iOS-side code needed. Small Compose "Media" screen; wire to existing BleConnectionManager. Lower risk than health; do second.

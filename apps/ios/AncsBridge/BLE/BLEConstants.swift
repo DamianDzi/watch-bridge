@@ -15,6 +15,12 @@ enum BLEConstants {
     /// Characteristic: call state (readable, notifiable — pushes call state to watch)
     static let callStateCharacteristicUUID = CBUUID(string: "A0E3D5B4-4C6F-4E8A-9B2D-7F1E3A5C8D0B")
 
+    /// Characteristic: health control (watch writes HELLO/PING; iOS notifies ACK/TIME_SYNC/PONG)
+    static let healthControlCharacteristicUUID = CBUUID(string: "A0E3D5B5-4C6F-4E8A-9B2D-7F1E3A5C8D0B")
+
+    /// Characteristic: health data (watch writes TLV record batches)
+    static let healthDataCharacteristicUUID = CBUUID(string: "A0E3D5B6-4C6F-4E8A-9B2D-7F1E3A5C8D0B")
+
     /// Call state values sent over BLE
     static let callStateIdle: UInt8 = 0x00
     static let callStateRinging: UInt8 = 0x01

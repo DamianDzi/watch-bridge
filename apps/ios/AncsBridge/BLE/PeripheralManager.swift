@@ -27,8 +27,16 @@ class PeripheralManager: NSObject, ObservableObject {
     private var companionService: CBMutableService?
     private var statusCharacteristic: CBMutableCharacteristic?
     private var callStateCharacteristic: CBMutableCharacteristic?
+    private var healthControlCharacteristic: CBMutableCharacteristic?
+    private var healthDataCharacteristic: CBMutableCharacteristic?
     private var serviceAdded = false
     private var scanTimer: Timer?
+    /// Health control notification that didn't fit the BLE buffer — retried
+    /// when the peripheral manager signals readiness.
+    private var pendingHealthControl: Data?
+
+    /// Health bridge: decodes B6 batches, writes to HealthKit, acks via B5.
+    let healthSyncManager = HealthSyncManager()
 
     /// Monitors phone call state via CallKit for live call status sync
     let callStateObserver = CallStateObserver()
@@ -70,6 +78,8 @@ class PeripheralManager: NSObject, ObservableObject {
         callStateObserver.onCallStateChanged = { [weak self] state in
             self?.notifyCallState(state)
         }
+        // Wire up health bridge acks/time-sync through this manager's B5 characteristic
+        healthSyncManager.channel = self
         // Start/stop based on setting
         updateCallStateObserving()
     }
@@ -249,11 +259,33 @@ class PeripheralManager: NSObject, ObservableObject {
             permissions: [.readable]
         )
 
+        healthControlCharacteristic = CBMutableCharacteristic(
+            type: BLEConstants.healthControlCharacteristicUUID,
+            // B5: watch writes HELLO/PING; iOS notifies ACK/TIME_SYNC/PONG; readable as time-sync snapshot
+            properties: [.read, .notify, .write, .writeWithoutResponse],
+            value: nil,
+            permissions: [.readable, .writeable]
+        )
+
+        healthDataCharacteristic = CBMutableCharacteristic(
+            type: BLEConstants.healthDataCharacteristicUUID,
+            // B6: watch writes TLV record batches (one complete batch per write)
+            properties: [.write, .writeWithoutResponse],
+            value: nil,
+            permissions: [.writeable]
+        )
+
         companionService = CBMutableService(
             type: BLEConstants.companionServiceUUID,
             primary: true
         )
-        companionService?.characteristics = [statusCharacteristic!, quickReplyCharacteristic, callStateCharacteristic!]
+        companionService?.characteristics = [
+            statusCharacteristic!,
+            quickReplyCharacteristic,
+            callStateCharacteristic!,
+            healthControlCharacteristic!,
+            healthDataCharacteristic!
+        ]
 
         peripheralManager.add(companionService!)
         serviceAdded = true
@@ -306,6 +338,11 @@ extension PeripheralManager: CBPeripheralManagerDelegate {
         } else if request.characteristic.uuid == BLEConstants.callStateCharacteristicUUID {
             request.value = Data([callStateObserver.currentState])
             peripheral.respond(to: request, withResult: .success)
+        } else if request.characteristic.uuid == BLEConstants.healthControlCharacteristicUUID {
+            // Time-sync snapshot without subscribing
+            let epochMs = Int64(Date().timeIntervalSince1970 * 1000)
+            request.value = HealthControlCodec.encode(.timeSync(epochMs: epochMs))
+            peripheral.respond(to: request, withResult: .success)
         } else {
             peripheral.respond(to: request, withResult: .attributeNotFound)
         }
@@ -318,8 +355,39 @@ extension PeripheralManager: CBPeripheralManagerDelegate {
                let payload = String(data: data, encoding: .utf8) {
                 logger.info("Quick reply received: \(payload)")
                 handleQuickReply(payload)
+            } else if request.characteristic.uuid == BLEConstants.healthControlCharacteristicUUID,
+                      let data = request.value {
+                logger.debug("Health control write (\(data.count) bytes)")
+                healthSyncManager.handleControlWrite(data)
+            } else if request.characteristic.uuid == BLEConstants.healthDataCharacteristicUUID,
+                      let data = request.value {
+                logger.debug("Health data batch (\(data.count) bytes)")
+                healthSyncManager.handleDataWrite(data)
             }
             peripheral.respond(to: request, withResult: .success)
+        }
+    }
+
+    // MARK: - Health control channel
+
+    /// Sends a control notification (ACK/TIME_SYNC/PONG) to subscribed watches.
+    /// If the BLE buffer is full the message is queued and flushed on
+    /// peripheralManagerIsReady(toUpdateSubscribers:).
+    @discardableResult
+    func sendHealthControl(_ data: Data) -> Bool {
+        guard let char = healthControlCharacteristic else { return false }
+        let sent = peripheralManager.updateValue(data, for: char, onSubscribedCentrals: nil)
+        if !sent {
+            pendingHealthControl = data
+            logger.info("Health control buffered — BLE buffer full")
+        }
+        return sent
+    }
+
+    func peripheralManagerIsReady(toUpdateSubscribers peripheral: CBPeripheralManager) {
+        if let data = pendingHealthControl {
+            pendingHealthControl = nil
+            _ = sendHealthControl(data)
         }
     }
 
@@ -366,6 +434,8 @@ extension PeripheralManager: CBCentralManagerDelegate {
         }
     }
 }
+
+extension PeripheralManager: HealthControlChannel {}
 
 // MARK: - DiscoveredWatch Model
 struct DiscoveredWatch: Identifiable {

@@ -253,6 +253,19 @@ struct StatusView: View {
                         .padding(.horizontal)
                     }
 
+                    // Health Sync
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Health Sync")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.secondary)
+                            .textCase(.uppercase)
+                            .padding(.horizontal)
+
+                        HealthSyncCard(health: viewModel.peripheralManager.healthSyncManager)
+                            .padding(.horizontal)
+                    }
+
                     Spacer(minLength: 20)
                 }
             }
