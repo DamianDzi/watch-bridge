@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		01CA779B1132563684CEB21B /* HealthSyncCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 926709A8DA80CA9A3D795E25 /* HealthSyncCard.swift */; };
 		0C1339CAF49308EE12D67173 /* BLEViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B64A6B42E55DCF830BD9501 /* BLEViewModel.swift */; };
 		0D89D3ECFF7D0E5DF95C362D /* BLEConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4027EE6B08DD2500C1BF6E94 /* BLEConstants.swift */; };
 		246322911A02C982C0331924 /* StatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 076673E488AFB468ED2E2EF9 /* StatusView.swift */; };
@@ -15,15 +16,20 @@
 		3DA84E7D7CE3E1D3A54D315E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 77C36C2AFA8EA8C56AF8471D /* Assets.xcassets */; };
 		4181448E736418ED1E58AEFC /* AddWatchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0BF9F2B6715DF8C2DDD8B8 /* AddWatchView.swift */; };
 		5A538DB399C1CBD93A665EBA /* QuickReplyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C8FAE0AB0196096C3D7552 /* QuickReplyStore.swift */; };
+		82720B21F804C968AD00A3C8 /* AckedRecordsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1F7C5723595F7C7E1C9B34B /* AckedRecordsStore.swift */; };
 		98910C98FC720871E4544C25 /* HowItWorksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03B56BE4BCAB856A9AFE50DB /* HowItWorksView.swift */; };
 		9B3BB8D8B67A12F25A4D6F26 /* AncsBridgeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC04AAF2152DC8E522F12619 /* AncsBridgeApp.swift */; };
+		A4E80E43CAB2EB1050FAE2EC /* HealthTLVTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5C424526FD5854D77A9A6FD /* HealthTLVTests.swift */; };
 		B6CCF526A866F740469E261D /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7CC11B1B20F374C838167B5 /* SettingsStore.swift */; };
 		B95E39797258FB0B69F70575 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE26FD7165900DB79D1EAA05 /* ContentView.swift */; };
 		BADFA7CC5AEE06DFBD06B68F /* QuickReplySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C4E6DA939E59F8521934572 /* QuickReplySettingsView.swift */; };
 		BAF4F26B9E9AC17651F796F1 /* ConnectionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD247F6A8BEECDA55C238CC2 /* ConnectionState.swift */; };
 		C64BBEB053EDA70670D3A4F7 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE23C48EE7171805E83E7C74 /* SettingsView.swift */; };
+		D1F48C50EA6CBDBC807C840E /* HealthSyncManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CDE9D700281B6E0D5267605 /* HealthSyncManager.swift */; };
+		DD9340FAB07FAED55ED3B215 /* HealthTLV.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B97157A77222F4E5E4CA300 /* HealthTLV.swift */; };
 		E0FE400394C388A4F3E3D11E /* PeripheralManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CD7E830A5834A54112C3678 /* PeripheralManager.swift */; };
 		EE03FF684C5486654CB942D5 /* AncsBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DAFE504FCCF42292D6F4FE8 /* AncsBridgeTests.swift */; };
+		EF4C33FB24ED674DA1913166 /* HealthKitWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44ABF7EEC7E05D1F959C7838 /* HealthKitWriter.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -41,7 +47,10 @@
 		076673E488AFB468ED2E2EF9 /* StatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusView.swift; sourceTree = "<group>"; };
 		0C4E6DA939E59F8521934572 /* QuickReplySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickReplySettingsView.swift; sourceTree = "<group>"; };
 		1BB2863CCCC6897C7008FFB7 /* AncsBridgeTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = AncsBridgeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		2B97157A77222F4E5E4CA300 /* HealthTLV.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthTLV.swift; sourceTree = "<group>"; };
+		3CDE9D700281B6E0D5267605 /* HealthSyncManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthSyncManager.swift; sourceTree = "<group>"; };
 		4027EE6B08DD2500C1BF6E94 /* BLEConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BLEConstants.swift; sourceTree = "<group>"; };
+		44ABF7EEC7E05D1F959C7838 /* HealthKitWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthKitWriter.swift; sourceTree = "<group>"; };
 		4CD7E830A5834A54112C3678 /* PeripheralManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeripheralManager.swift; sourceTree = "<group>"; };
 		523A43621478CD12C73CC964 /* Info-Generated.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "Info-Generated.plist"; sourceTree = "<group>"; };
 		5D80699CA7470D90625E8874 /* AncsBridge.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = AncsBridge.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -50,12 +59,15 @@
 		72C8FAE0AB0196096C3D7552 /* QuickReplyStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickReplyStore.swift; sourceTree = "<group>"; };
 		77C36C2AFA8EA8C56AF8471D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		8B0BF9F2B6715DF8C2DDD8B8 /* AddWatchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddWatchView.swift; sourceTree = "<group>"; };
+		926709A8DA80CA9A3D795E25 /* HealthSyncCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthSyncCard.swift; sourceTree = "<group>"; };
 		BE23C48EE7171805E83E7C74 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		BE26FD7165900DB79D1EAA05 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		CD247F6A8BEECDA55C238CC2 /* ConnectionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionState.swift; sourceTree = "<group>"; };
 		DDDD1DF5401A97F3ECA524FC /* CallStateObserver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallStateObserver.swift; sourceTree = "<group>"; };
 		DE9E7EB20D69D96663FD95A3 /* AncsBridge.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AncsBridge.entitlements; sourceTree = "<group>"; };
+		E5C424526FD5854D77A9A6FD /* HealthTLVTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthTLVTests.swift; sourceTree = "<group>"; };
 		E6C58B6974D26A3FA57422FB /* PairedDevice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairedDevice.swift; sourceTree = "<group>"; };
+		F1F7C5723595F7C7E1C9B34B /* AckedRecordsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AckedRecordsStore.swift; sourceTree = "<group>"; };
 		F7CC11B1B20F374C838167B5 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
 		FC04AAF2152DC8E522F12619 /* AncsBridgeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AncsBridgeApp.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -69,6 +81,7 @@
 				77C36C2AFA8EA8C56AF8471D /* Assets.xcassets */,
 				523A43621478CD12C73CC964 /* Info-Generated.plist */,
 				E33384D451D23D1FDBB2AC6A /* BLE */,
+				F4A377C1DA9F7361988C91CD /* Health */,
 				78951DEE32131D8A9C313205 /* Model */,
 				7CA157A73FDAF87BC06EFF4C /* Storage */,
 				E49B8E71FFD2920FFE74832C /* ViewModels */,
@@ -91,6 +104,7 @@
 			children = (
 				8B0BF9F2B6715DF8C2DDD8B8 /* AddWatchView.swift */,
 				BE26FD7165900DB79D1EAA05 /* ContentView.swift */,
+				926709A8DA80CA9A3D795E25 /* HealthSyncCard.swift */,
 				03B56BE4BCAB856A9AFE50DB /* HowItWorksView.swift */,
 				0C4E6DA939E59F8521934572 /* QuickReplySettingsView.swift */,
 				BE23C48EE7171805E83E7C74 /* SettingsView.swift */,
@@ -130,6 +144,7 @@
 			isa = PBXGroup;
 			children = (
 				5DAFE504FCCF42292D6F4FE8 /* AncsBridgeTests.swift */,
+				E5C424526FD5854D77A9A6FD /* HealthTLVTests.swift */,
 			);
 			path = AncsBridgeTests;
 			sourceTree = "<group>";
@@ -150,6 +165,17 @@
 				6B64A6B42E55DCF830BD9501 /* BLEViewModel.swift */,
 			);
 			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		F4A377C1DA9F7361988C91CD /* Health */ = {
+			isa = PBXGroup;
+			children = (
+				F1F7C5723595F7C7E1C9B34B /* AckedRecordsStore.swift */,
+				44ABF7EEC7E05D1F959C7838 /* HealthKitWriter.swift */,
+				3CDE9D700281B6E0D5267605 /* HealthSyncManager.swift */,
+				2B97157A77222F4E5E4CA300 /* HealthTLV.swift */,
+			);
+			path = Health;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -201,7 +227,6 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					92B3FE8C95BD8A47F92B4590 = {
-						DevelopmentTeam = R68RHN3HF5;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -242,6 +267,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				82720B21F804C968AD00A3C8 /* AckedRecordsStore.swift in Sources */,
 				4181448E736418ED1E58AEFC /* AddWatchView.swift in Sources */,
 				9B3BB8D8B67A12F25A4D6F26 /* AncsBridgeApp.swift in Sources */,
 				0D89D3ECFF7D0E5DF95C362D /* BLEConstants.swift in Sources */,
@@ -249,6 +275,10 @@
 				3444128F7B515916482238DB /* CallStateObserver.swift in Sources */,
 				BAF4F26B9E9AC17651F796F1 /* ConnectionState.swift in Sources */,
 				B95E39797258FB0B69F70575 /* ContentView.swift in Sources */,
+				EF4C33FB24ED674DA1913166 /* HealthKitWriter.swift in Sources */,
+				01CA779B1132563684CEB21B /* HealthSyncCard.swift in Sources */,
+				D1F48C50EA6CBDBC807C840E /* HealthSyncManager.swift in Sources */,
+				DD9340FAB07FAED55ED3B215 /* HealthTLV.swift in Sources */,
 				98910C98FC720871E4544C25 /* HowItWorksView.swift in Sources */,
 				25BCDC2B3260F8615BAF50A9 /* PairedDevice.swift in Sources */,
 				E0FE400394C388A4F3E3D11E /* PeripheralManager.swift in Sources */,
@@ -265,6 +295,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				EE03FF684C5486654CB942D5 /* AncsBridgeTests.swift in Sources */,
+				A4E80E43CAB2EB1050FAE2EC /* HealthTLVTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -439,7 +470,6 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = R68RHN3HF5;
 				INFOPLIST_FILE = "AncsBridge/Info-Generated.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -459,10 +489,9 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = AncsBridge/AncsBridge.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Distribution";
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = R68RHN3HF5;
 				INFOPLIST_FILE = "AncsBridge/Info-Generated.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

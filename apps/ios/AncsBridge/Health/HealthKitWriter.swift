@@ -265,8 +265,9 @@ final class HealthKitWriter {
     /// build gets the full device attribution.
     static let watchDevice: HKDevice? = {
         #if os(iOS)
-        return HKDevice(name: "OnePlus Watch 3 (watch-bridge)", firmwareVersion: nil, softwareVersion: nil,
-                        hardwareVersion: nil, localIdentifier: nil, udid: nil)
+        return HKDevice(name: "OnePlus Watch 3 (watch-bridge)", manufacturer: "OnePlus", model: "OPW3",
+                        hardwareVersion: nil, firmwareVersion: nil, softwareVersion: nil,
+                        localIdentifier: nil, udiDeviceIdentifier: nil)
         #else
         return nil
         #endif
