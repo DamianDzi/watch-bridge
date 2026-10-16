@@ -20,6 +20,12 @@ object AncsConstants {
     // Call State Characteristic UUID (readable, notifiable — iPhone pushes call state to watch)
     val CALL_STATE_CHARACTERISTIC_UUID: UUID = UUID.fromString("A0E3D5B4-4C6F-4E8A-9B2D-7F1E3A5C8D0B")
 
+    // Health Control Characteristic (watch writes HELLO/PING; iOS notifies ACK/TIME_SYNC/PONG)
+    val HEALTH_CONTROL_CHARACTERISTIC_UUID: UUID = UUID.fromString("A0E3D5B5-4C6F-4E8A-9B2D-7F1E3A5C8D0B")
+
+    // Health Data Characteristic (watch writes record batches — see specs/health-ble-protocol.md)
+    val HEALTH_DATA_CHARACTERISTIC_UUID: UUID = UUID.fromString("A0E3D5B6-4C6F-4E8A-9B2D-7F1E3A5C8D0B")
+
     // Call state values (matches iOS BLEConstants)
     const val CALL_STATE_IDLE: Byte = 0x00
     const val CALL_STATE_RINGING: Byte = 0x01

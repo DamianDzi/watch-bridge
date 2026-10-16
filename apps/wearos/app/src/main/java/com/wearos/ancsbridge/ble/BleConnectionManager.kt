@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.util.LinkedList
+import java.util.UUID
 
 /**
  * Manages the BLE GATT connection to an iPhone and the ANCS subscription lifecycle.
@@ -37,6 +38,8 @@ class BleConnectionManager(private val context: Context) {
         private const val INITIAL_RECONNECT_DELAY_MS = 3_000L
         private const val TARGET_MTU = 512
         private const val MAX_SERVICE_DISCOVERY_RETRIES = 2
+        private const val MAX_WRITE_ATTEMPTS = 5
+        private const val WRITE_RETRY_DELAY_MS = 150L
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -53,6 +56,18 @@ class BleConnectionManager(private val context: Context) {
     private val _callStateEvents = MutableSharedFlow<ByteArray>(extraBufferCapacity = 16)
     val callStateEvents: SharedFlow<ByteArray> = _callStateEvents.asSharedFlow()
 
+    // Health bridge: control messages (ACK/READY) pushed by the iOS companion
+    private val _healthControlEvents = MutableSharedFlow<ByteArray>(extraBufferCapacity = 16)
+    val healthControlEvents: SharedFlow<ByteArray> = _healthControlEvents.asSharedFlow()
+
+    // Health bridge: fired when the …B5 CCCD subscription is active (safe to send HELLO)
+    private val _healthControlReady = MutableSharedFlow<Unit>(extraBufferCapacity = 4)
+    val healthControlReady: SharedFlow<Unit> = _healthControlReady.asSharedFlow()
+
+    /** Negotiated ATT MTU; effective health batch cap = min(negotiatedMtu − 3, 509). */
+    var negotiatedMtu: Int = 23
+        private set
+
     private var gatt: BluetoothGatt? = null
     private var targetDevice: BluetoothDevice? = null
     private var reconnectJob: Job? = null
@@ -62,6 +77,19 @@ class BleConnectionManager(private val context: Context) {
     // CCCD write queue — must serialize descriptor writes
     private val descriptorWriteQueue = LinkedList<Pair<BluetoothGattCharacteristic, BluetoothGattDescriptor>>()
     private var isWritingDescriptor = false
+
+    // Serialized characteristic-write queue for the health characteristics (…B5/…B6).
+    // BLE allows one outstanding GATT operation; onCharacteristicWritten completes each entry.
+    private data class QueuedWrite(
+        val uuid: UUID,
+        val payload: ByteArray,
+        val attempts: Int,
+        val onResult: (Boolean) -> Unit
+    )
+
+    private val characteristicWriteQueue = LinkedList<QueuedWrite>()
+    private var currentWrite: QueuedWrite? = null
+    private var isSubscribedToHealthControl = false
 
     private var serviceDiscoveryRetries = 0
     private var notificationSourceChar: BluetoothGattCharacteristic? = null
@@ -99,6 +127,7 @@ class BleConnectionManager(private val context: Context) {
             clearCharacteristics()
             gatt.close()
             this.gatt = null
+            failAllQueuedWrites("disconnected")
 
             if (autoReconnect && targetDevice != null) {
                 scheduleReconnect()
@@ -183,6 +212,11 @@ class BleConnectionManager(private val context: Context) {
 
             val charUuid = descriptor.characteristic.uuid
             when (charUuid) {
+                AncsConstants.HEALTH_CONTROL_CHARACTERISTIC_UUID -> {
+                    Log.i(TAG, "Subscribed to health control — health sync can start")
+                    isSubscribedToHealthControl = true
+                    _healthControlReady.tryEmit(Unit)
+                }
                 AncsConstants.DATA_SOURCE_UUID -> {
                     Log.i(TAG, "Subscribed to Data Source, now subscribing to Notification Source")
                     notificationSourceChar?.let { subscribeToCharacteristic(it) }
@@ -196,10 +230,11 @@ class BleConnectionManager(private val context: Context) {
                     readGapDeviceName()
                     // Read companion status to notify iPhone app
                     readCompanionStatus()
-                    // Subscribe to call state from companion app (if available)
+                    // Subscribe to call state and health control from companion app (if available)
                     scope.launch {
                         delay(500) // Small delay to avoid GATT queue congestion
                         subscribeToCallState()
+                        subscribeToHealthControl()
                     }
                 }
             }
@@ -211,9 +246,17 @@ class BleConnectionManager(private val context: Context) {
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 Log.e(TAG, "Characteristic write failed: $status for ${characteristic.uuid}")
             }
+            // Complete the queued health write (if this completion belongs to it)
+            val req = currentWrite
+            if (req != null && characteristic.uuid == req.uuid) {
+                currentWrite = null
+                req.onResult(status == BluetoothGatt.GATT_SUCCESS)
+                processCharacteristicWriteQueue()
+            }
         },
         onMtuChanged = { mtu, status ->
             Log.i(TAG, "MTU negotiated: $mtu (status=$status)")
+            negotiatedMtu = mtu
             // After MTU negotiation, discover services
             gatt?.discoverServices()
         },
@@ -222,6 +265,9 @@ class BleConnectionManager(private val context: Context) {
         },
         onCallStateChanged = { data ->
             _callStateEvents.tryEmit(data)
+        },
+        onHealthControlChanged = { data ->
+            _healthControlEvents.tryEmit(data)
         }
     )
 
@@ -401,6 +447,84 @@ class BleConnectionManager(private val context: Context) {
     }
 
     /**
+     * Subscribe to the health control characteristic (…B5) from the iOS companion app.
+     * Idempotent: on rediscovery (gotcha #12) re-emits readiness instead of re-subscribing.
+     */
+    fun subscribeToHealthControl() {
+        if (isSubscribedToHealthControl) {
+            _healthControlReady.tryEmit(Unit)
+            return
+        }
+        val gatt = this.gatt ?: return
+        val service = gatt.getService(AncsConstants.COMPANION_SERVICE_UUID) ?: run {
+            Log.d(TAG, "subscribeToHealthControl: companion service not found")
+            return
+        }
+        val char = service.getCharacteristic(AncsConstants.HEALTH_CONTROL_CHARACTERISTIC_UUID) ?: run {
+            Log.d(TAG, "subscribeToHealthControl: health control characteristic not found")
+            return
+        }
+        subscribeToCharacteristic(char)
+        Log.i(TAG, "Subscribing to health control characteristic")
+    }
+
+    /**
+     * Queue a serialized write to a companion-service characteristic (health bridge).
+     * BLE permits one outstanding GATT operation; writes complete via
+     * onCharacteristicWritten, which drives the queue.
+     */
+    fun enqueueWrite(characteristicUuid: UUID, payload: ByteArray, onResult: (Boolean) -> Unit = {}) {
+        characteristicWriteQueue.add(QueuedWrite(characteristicUuid, payload, 0, onResult))
+        processCharacteristicWriteQueue()
+    }
+
+    private fun processCharacteristicWriteQueue() {
+        if (currentWrite != null) return
+        val gatt = this.gatt ?: run {
+            failAllQueuedWrites("no GATT connection")
+            return
+        }
+        val req = characteristicWriteQueue.poll() ?: return
+        val service = gatt.getService(AncsConstants.COMPANION_SERVICE_UUID) ?: run {
+            failWrite(req, "companion service not found")
+            return processCharacteristicWriteQueue()
+        }
+        val char = service.getCharacteristic(req.uuid) ?: run {
+            failWrite(req, "characteristic ${req.uuid} not found")
+            return processCharacteristicWriteQueue()
+        }
+        currentWrite = req
+        char.value = req.payload
+        char.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+        val accepted = gatt.writeCharacteristic(char)
+        if (!accepted) {
+            // GATT busy (e.g. an out-of-band ANCS write in flight) — retry shortly
+            currentWrite = null
+            if (req.attempts < MAX_WRITE_ATTEMPTS) {
+                characteristicWriteQueue.addFirst(req.copy(attempts = req.attempts + 1))
+                scope.launch {
+                    delay(WRITE_RETRY_DELAY_MS)
+                    processCharacteristicWriteQueue()
+                }
+            } else {
+                failWrite(req, "writeCharacteristic rejected after $MAX_WRITE_ATTEMPTS attempts")
+            }
+        }
+    }
+
+    private fun failWrite(req: QueuedWrite, reason: String) {
+        Log.e(TAG, "Write to ${req.uuid} failed: $reason")
+        req.onResult(false)
+    }
+
+    private fun failAllQueuedWrites(reason: String) {
+        currentWrite = null
+        while (characteristicWriteQueue.isNotEmpty()) {
+            failWrite(characteristicWriteQueue.poll()!!, reason)
+        }
+    }
+
+    /**
      * Write quick reply payload to the iPhone companion app via BLE.
      * Format: "callerName|replyMessage"
      */
@@ -494,6 +618,7 @@ class BleConnectionManager(private val context: Context) {
         notificationSourceChar = null
         controlPointChar = null
         dataSourceChar = null
+        isSubscribedToHealthControl = false
         descriptorWriteQueue.clear()
         isWritingDescriptor = false
     }

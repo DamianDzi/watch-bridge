@@ -66,6 +66,10 @@ dependencies {
     implementation("androidx.room:room-ktx:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")
 
+    // Health bridge: passive HR/steps (Health Services) + sleep/workouts (Health Connect)
+    implementation("androidx.health:health-services-client:1.1.0")
+    implementation("androidx.health.connect:connect-client:1.1.0")
+
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")

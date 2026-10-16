@@ -17,6 +17,11 @@ import com.wearos.ancsbridge.ble.AncsConstants
 import com.wearos.ancsbridge.ble.BleConnectionManager
 import com.wearos.ancsbridge.ble.BleScanner
 import com.wearos.ancsbridge.ble.BondStateReceiver
+import com.wearos.ancsbridge.health.HealthConnectReader
+import com.wearos.ancsbridge.health.HealthDao
+import com.wearos.ancsbridge.health.HealthDatabase
+import com.wearos.ancsbridge.health.HealthServicesCollector
+import com.wearos.ancsbridge.health.HealthSyncManager
 import com.wearos.ancsbridge.model.AncsEvent
 import com.wearos.ancsbridge.model.AncsNotification
 import com.wearos.ancsbridge.model.ConnectionState
@@ -72,6 +77,10 @@ class AncsService : Service() {
     private lateinit var scanner: BleScanner
     private lateinit var notificationManager: NotificationManager
     private lateinit var vibrator: Vibrator
+    private lateinit var healthDao: HealthDao
+    private lateinit var healthSyncManager: HealthSyncManager
+    private lateinit var healthCollector: HealthServicesCollector
+    private lateinit var healthConnectReader: HealthConnectReader
 
     private val dataSourceAssembler = DataSourceAssembler()
     private val appNameCache = mutableMapOf<String, String>()
@@ -132,6 +141,22 @@ class AncsService : Service() {
                 handleCompanionCallState(data)
             }
         }
+
+        // Health bridge: Room buffer, BLE sync to iPhone, and the two collectors
+        // (passive Health Services for HR/steps/battery; Health Connect for
+        // sleep/workouts — see specs/health-ble-protocol.md)
+        val db = HealthDatabase.get(this)
+        healthDao = db.healthDao()
+        healthSyncManager = HealthSyncManager(this, healthDao, connectionManager, scope)
+        healthSyncManager.start()
+        healthCollector = HealthServicesCollector(this, healthDao, scope) {
+            healthSyncManager.onRecordsAvailable()
+        }
+        healthCollector.start()
+        healthConnectReader = HealthConnectReader(this, healthDao, db.seenHcDao(), scope) {
+            healthSyncManager.onRecordsAvailable()
+        }
+        healthConnectReader.start()
 
         // Update service notification and shared state based on connection state
         scope.launch {
@@ -219,6 +244,8 @@ class AncsService : Service() {
         try {
             unregisterReceiver(connectionManager.bondStateReceiver)
         } catch (_: IllegalArgumentException) { }
+        healthCollector.stop()
+        healthConnectReader.stop()
         connectionManager.destroy()
         attributeRequestQueue.close()
         scope.cancel()
