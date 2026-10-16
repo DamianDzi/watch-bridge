@@ -15,15 +15,16 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.core.content.ContextCompat
 import androidx.health.connect.client.HealthConnectClient
+import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
-import androidx.health.connect.client.permission.PermissionController
 import androidx.health.connect.client.records.DistanceRecord
-import androidx.health.connect.client.records.ExerciseRoute
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
+import androidx.lifecycle.lifecycleScope
 import com.wearos.ancsbridge.ui.theme.AncsBridgeTheme
+import kotlinx.coroutines.launch
 import com.wearos.ancsbridge.viewmodel.MainViewModel
 
 class MainActivity : ComponentActivity() {
@@ -80,26 +81,38 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestHealthConnectPermissions() {
-        try {
-            if (HealthConnectClient.sdkStatus(this) != HealthConnectClient.SDK_AVAILABLE) return
-            val client = HealthConnectClient.getOrCreate(this)
-            val permissions = setOf(
-                HealthPermission.getReadPermission(SleepSessionRecord::class),
-                HealthPermission.getReadPermission(ExerciseSessionRecord::class),
-                HealthPermission.getReadPermission(ExerciseRoute::class),
-                HealthPermission.getReadPermission(HeartRateRecord::class),
-                HealthPermission.getReadPermission(DistanceRecord::class),
-                HealthPermission.getReadPermission(TotalCaloriesBurnedRecord::class)
-            )
-            if (!client.permissionController.hasAllPermissions(permissions)) {
-                healthConnectLauncher.launch(permissions)
-            } else {
+        lifecycleScope.launch {
+            try {
+                // sdkStatus is internal-API in connect-client 1.1.0; getOrCreate
+                // throws when Health Connect is unavailable, handled by the catch.
+                val client = HealthConnectClient.getOrCreate(this@MainActivity)
+                val permissions = setOf(
+                    HealthPermission.getReadPermission(SleepSessionRecord::class),
+                    HealthPermission.getReadPermission(ExerciseSessionRecord::class),
+                    // ExerciseRoute is not a Record — platform permission string.
+                    READ_EXERCISE_ROUTE_PERMISSION,
+                    HealthPermission.getReadPermission(HeartRateRecord::class),
+                    HealthPermission.getReadPermission(DistanceRecord::class),
+                    HealthPermission.getReadPermission(TotalCaloriesBurnedRecord::class)
+                )
+                val granted = client.permissionController.getGrantedPermissions()
+                if (!granted.containsAll(permissions)) {
+                    healthConnectLauncher.launch(permissions)
+                } else {
+                    promptBatteryExemptionIfNeeded()
+                }
+            } catch (e: Exception) {
+                Log.w("MainActivity", "Health Connect unavailable: ${e.message}")
                 promptBatteryExemptionIfNeeded()
             }
-        } catch (e: Exception) {
-            Log.w("MainActivity", "Health Connect unavailable: ${e.message}")
-            promptBatteryExemptionIfNeeded()
         }
+    }
+
+    private companion object {
+        /** Platform permission string (ExerciseRoute is not a Record; the manifest
+         *  declares the same string). */
+        private const val READ_EXERCISE_ROUTE_PERMISSION =
+            "android.permission.health.READ_EXERCISE_ROUTE"
     }
 
     /**

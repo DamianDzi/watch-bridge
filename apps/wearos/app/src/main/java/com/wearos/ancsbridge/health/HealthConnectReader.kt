@@ -4,15 +4,14 @@ import android.content.Context
 import android.util.Log
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.records.DistanceRecord
-import androidx.health.connect.client.records.ExerciseRoute
 import androidx.health.connect.client.records.ExerciseRouteResult
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
-import androidx.health.connect.client.request.ReadRecordsRequest
-import androidx.health.connect.client.request.TimeRangeFilter
 import androidx.health.connect.client.permission.HealthPermission
+import androidx.health.connect.client.request.ReadRecordsRequest
+import androidx.health.connect.client.time.TimeRangeFilter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -65,6 +64,11 @@ class HealthConnectReader(
         private const val HC_STAGE_LIGHT = 5
         private const val HC_STAGE_DEEP = 6
         private const val HC_STAGE_REM = 7
+
+        /** Platform permission string (ExerciseRoute is not a Record, so HealthPermission
+         *  has no getReadPermission overload for it; the manifest declares the same string). */
+        private const val READ_EXERCISE_ROUTE_PERMISSION =
+            "android.permission.health.READ_EXERCISE_ROUTE"
     }
 
     private var pollJob: Job? = null
@@ -73,7 +77,9 @@ class HealthConnectReader(
     private val requiredPermissions = setOf(
         HealthPermission.getReadPermission(SleepSessionRecord::class),
         HealthPermission.getReadPermission(ExerciseSessionRecord::class),
-        HealthPermission.getReadPermission(ExerciseRoute::class),
+        // ExerciseRoute is not a Record (no getReadPermission overload) — use the
+        // platform permission string the manifest already declares.
+        READ_EXERCISE_ROUTE_PERMISSION,
         HealthPermission.getReadPermission(HeartRateRecord::class),
         HealthPermission.getReadPermission(DistanceRecord::class),
         HealthPermission.getReadPermission(TotalCaloriesBurnedRecord::class)
@@ -98,12 +104,16 @@ class HealthConnectReader(
     }
 
     private suspend fun pollOnce() {
-        if (HealthConnectClient.sdkStatus(context) != HealthConnectClient.SDK_AVAILABLE) {
+        // sdkStatus is internal-API in connect-client 1.1.0 (Kotlin refuses it);
+        // getOrCreate throws when the provider is unavailable, which runCatching turns
+        // into a null client — same effect, supported surface only.
+        val hc = client ?: runCatching { HealthConnectClient.getOrCreate(context) }
+            .getOrNull()?.also { client = it }
+        if (hc == null) {
             Log.i(TAG, "Health Connect unavailable on this device — sleep/workouts not collected")
             return
         }
-        val hc = client ?: HealthConnectClient.getOrCreate(context).also { client = it }
-        if (!hc.permissionController.hasAllPermissions(requiredPermissions)) {
+        if (!hc.permissionController.getGrantedPermissions().containsAll(requiredPermissions)) {
             Log.i(TAG, "Health Connect permissions not granted — sleep/workouts not collected")
             return
         }
@@ -115,7 +125,7 @@ class HealthConnectReader(
         val newSeenIds = mutableListOf<SeenHcRecord>()
 
         // ---- Sleep ----------------------------------------------------------
-        val sleepRecords = hc.readRecords(ReadRecordsRequest(SleepSessionRecord::class, filter)).records
+        val sleepRecords = hc.readRecords(ReadRecordsRequest<SleepSessionRecord>(filter)).records
         for (session in sleepRecords) {
             if (session.metadata.id in seen) continue
             val stages = session.stages.mapNotNull { stage ->
@@ -143,7 +153,7 @@ class HealthConnectReader(
         }
 
         // ---- Workouts ---------------------------------------------------------
-        val workouts = hc.readRecords(ReadRecordsRequest(ExerciseSessionRecord::class, filter)).records
+        val workouts = hc.readRecords(ReadRecordsRequest<ExerciseSessionRecord>(filter)).records
         for (session in workouts) {
             if (session.metadata.id in seen) continue
             newEntities += buildWorkoutRecords(hc, session)
@@ -169,19 +179,19 @@ class HealthConnectReader(
         val window = TimeRangeFilter.between(session.startTime, session.endTime)
 
         // HR samples during the session
-        val hrSamples = hc.readRecords(ReadRecordsRequest(HeartRateRecord::class, window)).records
+        val hrSamples = hc.readRecords(ReadRecordsRequest<HeartRateRecord>(window)).records
             .flatMap { it.samples }
             .sortedBy { it.time.toEpochMilli() }
             .map { HealthTlv.HrSample(it.time.toEpochMilli(), it.beatsPerMinute.toInt()) }
 
         // GPS route (requires READ_EXERCISE_ROUTE permission + user consent on some builds)
-        val gpsPoints = (session.route as? ExerciseRouteResult.Data)
-            ?.route?.route
+        val gpsPoints = (session.exerciseRouteResult as? ExerciseRouteResult.Data)
+            ?.exerciseRoute?.route
             ?.map {
                 HealthTlv.GpsPoint(
                     (it.latitude * 1e7).toInt(),
                     (it.longitude * 1e7).toInt(),
-                    it.altitude.inMeters.toFloat(),
+                    it.altitude?.inMeters?.toFloat() ?: 0f,
                     it.time.toEpochMilli()
                 )
             }
@@ -193,9 +203,9 @@ class HealthConnectReader(
         val avgHr = hrSamples.takeIf { it.isNotEmpty() }?.let { list -> list.sumOf { it.bpm } / list.size } ?: 0
         val maxHr = hrSamples.maxOfOrNull { it.bpm } ?: 0
 
-        val distanceMeters = hc.readRecords(ReadRecordsRequest(DistanceRecord::class, window)).records
+        val distanceMeters = hc.readRecords(ReadRecordsRequest<DistanceRecord>(window)).records
             .sumOf { it.distance.inMeters.toDouble() }.toLong()
-        val caloriesKcal = hc.readRecords(ReadRecordsRequest(TotalCaloriesBurnedRecord::class, window)).records
+        val caloriesKcal = hc.readRecords(ReadRecordsRequest<TotalCaloriesBurnedRecord>(window)).records
             .sumOf { it.energy.inKilocalories }
 
         val entities = mutableListOf<HealthRecordEntity>()

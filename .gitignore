@@ -6,3 +6,5 @@ DerivedData/
 node_modules/
 .env*
 .claude/worktrees/
+.gradle/
+local.properties

@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.wearos.ancsbridge"
-    compileSdk = 35
+    compileSdk = 36 // connect-client 1.1.0 requires compiling against API 36+
 
     defaultConfig {
         applicationId = "com.wearos.ancsbridge"
@@ -25,6 +25,12 @@ android {
                 "proguard-rules.pro"
             )
         }
+    }
+
+    testOptions {
+        // Pure-JVM unit tests: android.util.Log calls become no-ops instead of
+        // throwing "not mocked" (upstream's DataSourceAssembler tests hit Log.d).
+        unitTests.isReturnDefaultValues = true
     }
 
     compileOptions {
@@ -69,6 +75,10 @@ dependencies {
     // Health bridge: passive HR/steps (Health Services) + sleep/workouts (Health Connect)
     implementation("androidx.health:health-services-client:1.1.0")
     implementation("androidx.health.connect:connect-client:1.1.0")
+    // health-services-client declares guava runtime-scope only; referencing
+    // ListenableFuture return types (clearPassiveListenerCallbackAsync) needs it
+    // on the compile classpath. Version matches the health-services POM.
+    implementation("com.google.guava:guava:32.0.1-android")
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")

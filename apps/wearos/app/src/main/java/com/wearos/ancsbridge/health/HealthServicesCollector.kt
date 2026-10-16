@@ -5,18 +5,16 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
+import android.os.SystemClock
 import android.util.Log
 import androidx.health.services.client.HealthServices
 import androidx.health.services.client.PassiveListenerCallback
-import androidx.health.services.client.awaitWithException
-import androidx.health.services.client.data.DataPoint
 import androidx.health.services.client.data.DataType
 import androidx.health.services.client.data.DataPointContainer
-import androidx.health.services.client.data.IntervalDataPoint
 import androidx.health.services.client.data.PassiveListenerConfig
-import androidx.health.services.client.data.SampleDataPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import java.time.Instant
 
 /**
  * Continuous passive collection of heart-rate samples and step intervals via
@@ -72,8 +70,11 @@ class HealthServicesCollector(
                     .setDataTypes(setOf(DataType.HEART_RATE_BPM, DataType.STEPS))
                     .setShouldUserActivityInfoBeRequested(false)
                     .build()
-                passiveClient.setPassiveListenerCallback(config, directExecutor, callback).awaitWithException()
-                Log.i(TAG, "Passive monitoring registered for HR + steps")
+                // setPassiveListenerCallback(config, executor, callback) is void in
+                // health-services-client 1.1.0 — registration failures arrive via
+                // callback.onRegistrationFailed instead.
+                passiveClient.setPassiveListenerCallback(config, directExecutor, callback)
+                Log.i(TAG, "Passive monitoring registration requested for HR + steps")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to register passive monitoring: ${e.message}")
             }
@@ -109,40 +110,32 @@ class HealthServicesCollector(
         }
 
         override fun onNewDataPointsReceived(dataPoints: DataPointContainer) {
-            val entities = dataPoints.dataPoints.mapNotNull { it.toEntity() }
+            // DataPointContainer's dataPoints map is internal; the typed getData()
+            // accessors are the public surface. Data points carry durations-from-boot,
+            // converted to wall-clock via the boot instant (now − elapsedRealtime).
+            // The converters use Java-style names (getTimeInstant/getStartInstant/
+            // getEndInstant) in health-services-client 1.1.0.
+            val bootInstant = Instant.now().minusMillis(SystemClock.elapsedRealtime())
+            val entities = mutableListOf<HealthRecordEntity>()
+            dataPoints.getData(DataType.HEART_RATE_BPM).forEach { p ->
+                entities += HealthRecordMapper.heartRate(
+                    p.value.toInt(),
+                    p.getTimeInstant(bootInstant).toEpochMilli()
+                )
+            }
+            dataPoints.getData(DataType.STEPS).forEach { p ->
+                entities += HealthRecordMapper.steps(
+                    p.value,
+                    p.getStartInstant(bootInstant).toEpochMilli(),
+                    p.getEndInstant(bootInstant).toEpochMilli()
+                )
+            }
             if (entities.isEmpty()) return
             scope.launch {
                 dao.insertAll(entities)
                 Log.d(TAG, "Collected ${entities.size} health records")
                 onRecordsAvailable()
             }
-        }
-    }
-
-    private fun DataPoint.toEntity(): HealthRecordEntity? {
-        // DataType does not override equals() in health-services-client 1.1.0
-        // (verified against the AAR), so `when (dataType)` would be identity
-        // comparison — compare by name instead.
-        return when (this) {
-            is SampleDataPoint<*> -> when (dataType.name) {
-                DataType.HEART_RATE_BPM.name -> {
-                    val bpm = (value as? Long)?.toInt() ?: return null
-                    HealthRecordMapper.heartRate(bpm, timeInstant.toEpochMilli())
-                }
-                else -> null
-            }
-            is IntervalDataPoint<*> -> when (dataType.name) {
-                DataType.STEPS.name -> {
-                    val count = (value as? Long) ?: return null
-                    HealthRecordMapper.steps(
-                        count,
-                        startInstant.toEpochMilli(),
-                        endInstant.toEpochMilli()
-                    )
-                }
-                else -> null
-            }
-            else -> null
         }
     }
 }

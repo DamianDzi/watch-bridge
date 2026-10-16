@@ -54,6 +54,10 @@ class DataSourceAssembler {
     private var currentAttrBytesRead: Int = 0
     private val currentAttrData = ByteArrayOutputStream()
 
+    // True between reading an attribute's ID and its full 2-byte length — the
+    // length field may span fragment boundaries.
+    private var awaitingLength = false
+
     // Category and flags from the original NS event (set externally)
     private var categoryId: Int = 0
     private var eventFlags: Int = 0
@@ -139,8 +143,11 @@ class DataSourceAssembler {
 
                 currentAttrId = bytes[offset].toInt() and 0xFF
                 offset++
+                awaitingLength = true
+            }
 
-                // Read 2-byte length
+            if (awaitingLength) {
+                // Read the 2-byte length; it may arrive split across fragments.
                 if (offset + 1 >= bytes.size) {
                     // Need more data for length
                     compactBuffer(bytes, offset)
@@ -151,6 +158,7 @@ class DataSourceAssembler {
                 offset += 2
                 currentAttrBytesRead = 0
                 currentAttrData.reset()
+                awaitingLength = false
             }
 
             // Read attribute data
@@ -249,6 +257,7 @@ class DataSourceAssembler {
         currentAttrLength = -1
         currentAttrBytesRead = 0
         currentAttrData.reset()
+        awaitingLength = false
         categoryId = 0
         eventFlags = 0
     }
