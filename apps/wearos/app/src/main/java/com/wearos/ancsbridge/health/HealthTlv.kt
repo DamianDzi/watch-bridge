@@ -248,12 +248,16 @@ object HealthTlv {
         return batches
     }
 
-    private fun encodeBatch(records: List<WireRecord>): ByteArray {
+    /** Encodes ONE complete batch (public — the sync manager groups records per batch). */
+    fun encodeBatch(records: List<WireRecord>): ByteArray {
         val out = ByteWriter(records.sumOf { 3 + encodedPayloadSize(it) } + 1)
         out.u8(records.size)
         records.forEach { out.bytes(encodeRecord(it)) }
         return out.toByteArray()
     }
+
+    /** Total wire size of one record: 3 B header (type + len) + payload. */
+    fun encodedSize(record: WireRecord): Int = 3 + encodedPayloadSize(record)
 
     private fun encodedPayloadSize(record: WireRecord): Int = when (record) {
         is HeartRate -> 18

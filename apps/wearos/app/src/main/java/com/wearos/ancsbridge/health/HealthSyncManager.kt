@@ -131,33 +131,53 @@ class HealthSyncManager(
                 val records = dao.oldestUnsent(HealthTlv.MAX_RECORDS_PER_BATCH)
                 if (records.isEmpty()) break
 
+                // Poison rows are marked sent immediately (dropped) so they can't
+                // wedge the pump by being refetched and re-failing forever.
+                val failedIds = mutableListOf<Long>()
                 val wire = records.mapNotNull { entity ->
                     try {
                         HealthRecordMapper.toWire(entity)
                     } catch (e: IllegalArgumentException) {
                         Log.e(TAG, "Unmappable record ${entity.recordId} type=${entity.type}: ${e.message}")
+                        failedIds += entity.recordId
                         null
                     }
                 }
-                if (wire.isEmpty()) {
-                    // poison rows: mark sent so they don't wedge the pump (they're dropped)
-                    dao.markSent(records.map { it.recordId }, System.currentTimeMillis())
-                    continue
-                }
+                if (failedIds.isNotEmpty()) dao.markSent(failedIds, System.currentTimeMillis())
+                if (wire.isEmpty()) continue
 
-                val batches = HealthTlv.buildBatches(wire, batchBytes)
-                // The Room ids that went out in this round (may span multiple writes)
-                val roundIds = wire.map { it.recordId }.toMutableSet()
-                dao.markSent(wire.map { it.recordId }, System.currentTimeMillis())
-                for (batch in batches) {
-                    pendingBatches.add(roundIds.toMutableSet())
-                    val batchIds = roundIds
-                    ble.enqueueWrite(AncsConstants.HEALTH_DATA_CHARACTERISTIC_UUID, batch) { ok ->
+                // Group records into per-batch lists FIRST, so each in-flight
+                // pendingBatches entry tracks exactly the ids of one batch — a
+                // failed write restores only its own batch, and the ≤3 cap counts
+                // batches, not rounds.
+                val groups = mutableListOf<List<HealthTlv.WireRecord>>()
+                var current = mutableListOf<HealthTlv.WireRecord>()
+                var currentSize = 1 // record_count byte
+                for (record in wire) {
+                    val size = HealthTlv.encodedSize(record)
+                    if (current.isNotEmpty() &&
+                        (currentSize + size > batchBytes || current.size >= HealthTlv.MAX_RECORDS_PER_BATCH)) {
+                        groups += current
+                        current = mutableListOf()
+                        currentSize = 1
+                    }
+                    current += record
+                    currentSize += size
+                }
+                if (current.isNotEmpty()) groups += current
+
+                for (group in groups) {
+                    if (pendingBatches.size >= MAX_UNACKED_BATCHES) break
+                    val ids = group.map { it.recordId }
+                    val idSet = ids.toMutableSet()
+                    dao.markSent(ids, System.currentTimeMillis())
+                    pendingBatches.add(idSet)
+                    ble.enqueueWrite(AncsConstants.HEALTH_DATA_CHARACTERISTIC_UUID, HealthTlv.encodeBatch(group)) { ok ->
                         if (!ok) {
-                            Log.e(TAG, "Batch write failed — restoring ${batchIds.size} records to unsent")
+                            Log.e(TAG, "Batch write failed — restoring ${ids.size} records to unsent")
                             scope.launch {
-                                dao.clearSentFor(batchIds.toList())
-                                pendingBatches.removeAll { it == batchIds || it.isEmpty() }
+                                dao.clearSentFor(ids)
+                                pendingBatches.removeAll { it == idSet }
                             }
                         }
                     }

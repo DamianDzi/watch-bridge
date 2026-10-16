@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.records.DistanceRecord
+import androidx.health.connect.client.records.ExerciseRoute
 import androidx.health.connect.client.records.ExerciseRouteResult
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
@@ -47,19 +48,23 @@ class HealthConnectReader(
         private const val TAG = "HealthConnectReader"
         private const val POLL_INTERVAL_MS = 30 * 60 * 1000L
         private const val WINDOW_DAYS = 7L
-        private const val HR_SAMPLES_PER_CHUNK = 40   // 12 + 10n ≤ 509
-        private const val GPS_POINTS_PER_CHUNK = 24   // 12 + 20n ≤ 509
+        // Chunk caps so one record fits a 509 B batch:
+        // record = 3 B TLV header + payload; payload = 9 B (u64 id + u8 count) + per-item bytes
+        private const val HR_SAMPLES_PER_CHUNK = 40   // 3 + 9 + 10n ≤ 509 → n ≤ 49; 40 is safe
+        private const val GPS_POINTS_PER_CHUNK = 24   // 3 + 9 + 20n ≤ 509 → n ≤ 24
 
         // Health Connect SleepSessionRecord.Stage stage ints (StageTypes is
-        // @RestrictTo so the constants aren't public API — values per docs).
-        // TODO(T7): verify these on hardware before trusting sleep mapping.
+        // @RestrictTo so the constants aren't public API — values per docs):
+        // 0 UNKNOWN, 1 AWAKE, 2 AWAKE_IN_BED, 3 SLEEPING, 4 OUT_OF_BED,
+        // 5 LIGHT, 6 DEEP, 7 REM. TODO(T7): verify on hardware.
         private const val HC_STAGE_UNKNOWN = 0
         private const val HC_STAGE_AWAKE = 1
         private const val HC_STAGE_AWAKE_IN_BED = 2
-        private const val HC_STAGE_OUT_OF_BED = 3
-        private const val HC_STAGE_LIGHT = 4
-        private const val HC_STAGE_DEEP = 5
-        private const val HC_STAGE_REM = 6
+        private const val HC_STAGE_SLEEPING = 3
+        private const val HC_STAGE_OUT_OF_BED = 4
+        private const val HC_STAGE_LIGHT = 5
+        private const val HC_STAGE_DEEP = 6
+        private const val HC_STAGE_REM = 7
     }
 
     private var pollJob: Job? = null
@@ -68,6 +73,7 @@ class HealthConnectReader(
     private val requiredPermissions = setOf(
         HealthPermission.getReadPermission(SleepSessionRecord::class),
         HealthPermission.getReadPermission(ExerciseSessionRecord::class),
+        HealthPermission.getReadPermission(ExerciseRoute::class),
         HealthPermission.getReadPermission(HeartRateRecord::class),
         HealthPermission.getReadPermission(DistanceRecord::class),
         HealthPermission.getReadPermission(TotalCaloriesBurnedRecord::class)
@@ -112,13 +118,15 @@ class HealthConnectReader(
         val sleepRecords = hc.readRecords(ReadRecordsRequest(SleepSessionRecord::class, filter)).records
         for (session in sleepRecords) {
             if (session.metadata.id in seen) continue
-            val stages = session.stages.map { stage ->
-                HealthTlv.SleepStage(
-                    recordId = 0, // Room assigns; ids only matter for wire records built later
-                    stage = mapSleepStage(stage.stage),
-                    startEpochMs = stage.startTime.toEpochMilli(),
-                    endEpochMs = stage.endTime.toEpochMilli()
-                )
+            val stages = session.stages.mapNotNull { stage ->
+                mapSleepStage(stage.stage)?.let { mapped ->
+                    HealthTlv.SleepStage(
+                        recordId = 0, // Room assigns; ids only matter for wire records built later
+                        stage = mapped,
+                        startEpochMs = stage.startTime.toEpochMilli(),
+                        endEpochMs = stage.endTime.toEpochMilli()
+                    )
+                }
             }
             stages.forEach { newEntities += HealthRecordMapper.sleepStage(it.stage, it.startEpochMs, it.endEpochMs) }
             newEntities += HealthRecordMapper.sleepSummary(
@@ -208,12 +216,13 @@ class HealthConnectReader(
         return entities
     }
 
-    private fun mapSleepStage(hcStage: Int): Int = when (hcStage) {
+    /** null = skip the record entirely (UNKNOWN stage carries no useful signal). */
+    private fun mapSleepStage(hcStage: Int): Int? = when (hcStage) {
         HC_STAGE_AWAKE, HC_STAGE_AWAKE_IN_BED, HC_STAGE_OUT_OF_BED -> HealthTlv.SLEEP_AWAKE
-        HC_STAGE_LIGHT -> HealthTlv.SLEEP_LIGHT
+        HC_STAGE_SLEEPING, HC_STAGE_LIGHT -> HealthTlv.SLEEP_LIGHT
         HC_STAGE_DEEP -> HealthTlv.SLEEP_DEEP
         HC_STAGE_REM -> HealthTlv.SLEEP_REM
-        else -> HealthTlv.SLEEP_IN_BED // UNKNOWN and anything unmapped
+        else -> null
     }
 
     private fun mapExerciseType(hcType: Int): Int = when (hcType) {

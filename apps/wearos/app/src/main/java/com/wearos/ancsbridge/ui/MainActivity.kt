@@ -18,6 +18,7 @@ import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.permission.PermissionController
 import androidx.health.connect.client.records.DistanceRecord
+import androidx.health.connect.client.records.ExerciseRoute
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
@@ -85,6 +86,7 @@ class MainActivity : ComponentActivity() {
             val permissions = setOf(
                 HealthPermission.getReadPermission(SleepSessionRecord::class),
                 HealthPermission.getReadPermission(ExerciseSessionRecord::class),
+                HealthPermission.getReadPermission(ExerciseRoute::class),
                 HealthPermission.getReadPermission(HeartRateRecord::class),
                 HealthPermission.getReadPermission(DistanceRecord::class),
                 HealthPermission.getReadPermission(TotalCaloriesBurnedRecord::class)
@@ -108,20 +110,24 @@ class MainActivity : ComponentActivity() {
     private fun promptBatteryExemptionIfNeeded() {
         val prefs = getSharedPreferences("health_bridge", Context.MODE_PRIVATE)
         if (prefs.getBoolean("battery_prompt_shown", false)) return
-        prefs.edit().putBoolean("battery_prompt_shown", true).apply()
 
         val pm = getSystemService(PowerManager::class.java)
-        if (!pm.isIgnoringBatteryOptimizations(packageName)) {
-            try {
-                startActivity(
-                    Intent(
-                        Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                        Uri.parse("package:$packageName")
-                    )
+        if (pm.isIgnoringBatteryOptimizations(packageName)) {
+            prefs.edit().putBoolean("battery_prompt_shown", true).apply()
+            return
+        }
+        try {
+            startActivity(
+                Intent(
+                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                    Uri.parse("package:$packageName")
                 )
-            } catch (e: Exception) {
-                Log.w("MainActivity", "Battery exemption prompt failed: ${e.message}")
-            }
+            )
+            // Mark as shown only after the prompt actually launched — a failed
+            // launch (ActivityNotFoundException etc.) retries on the next open.
+            prefs.edit().putBoolean("battery_prompt_shown", true).apply()
+        } catch (e: Exception) {
+            Log.w("MainActivity", "Battery exemption prompt failed: ${e.message}")
         }
     }
 }

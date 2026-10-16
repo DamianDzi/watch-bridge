@@ -127,7 +127,7 @@ class BleConnectionManager(private val context: Context) {
             clearCharacteristics()
             gatt.close()
             this.gatt = null
-            failAllQueuedWrites("disconnected")
+            scope.launch { failAllQueuedWrites("disconnected") }
 
             if (autoReconnect && targetDevice != null) {
                 scheduleReconnect()
@@ -179,7 +179,14 @@ class BleConnectionManager(private val context: Context) {
             // If already subscribed (rediscovery for companion service), just read companion
             if (notificationSourceChar != null && dataSourceChar != null) {
                 Log.i(TAG, "ANCS already subscribed, checking companion service")
-                readCompanionStatus()
+                // Also (re)subscribe health control: iOS app relaunch without a
+                // link drop rediscovers services but never re-triggered the
+                // NS-subscribed path — without this, health sync stayed dead.
+                // subscribeToHealthControl is idempotent (gotcha #12).
+                scope.launch {
+                    readCompanionStatus()
+                    subscribeToHealthControl()
+                }
                 return@GattCallback
             }
 
@@ -246,13 +253,9 @@ class BleConnectionManager(private val context: Context) {
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 Log.e(TAG, "Characteristic write failed: $status for ${characteristic.uuid}")
             }
-            // Complete the queued health write (if this completion belongs to it)
-            val req = currentWrite
-            if (req != null && characteristic.uuid == req.uuid) {
-                currentWrite = null
-                req.onResult(status == BluetoothGatt.GATT_SUCCESS)
-                processCharacteristicWriteQueue()
-            }
+            // GATT callbacks arrive on a Binder thread — hop to Main; the
+            // write queue is Main-confined (single-threaded by construction)
+            scope.launch { completeCurrentWrite(characteristic.uuid, status) }
         },
         onMtuChanged = { mtu, status ->
             Log.i(TAG, "MTU negotiated: $mtu (status=$status)")
@@ -472,9 +475,24 @@ class BleConnectionManager(private val context: Context) {
      * Queue a serialized write to a companion-service characteristic (health bridge).
      * BLE permits one outstanding GATT operation; writes complete via
      * onCharacteristicWritten, which drives the queue.
+     *
+     * The queue is Main-confined: enqueue (Main callers), completion (hopped from
+     * the GATT Binder thread via scope.launch), and retries (delayed launch) all
+     * mutate it on Dispatchers.Main — no lock needed.
      */
     fun enqueueWrite(characteristicUuid: UUID, payload: ByteArray, onResult: (Boolean) -> Unit = {}) {
-        characteristicWriteQueue.add(QueuedWrite(characteristicUuid, payload, 0, onResult))
+        scope.launch {
+            characteristicWriteQueue.add(QueuedWrite(characteristicUuid, payload, 0, onResult))
+            processCharacteristicWriteQueue()
+        }
+    }
+
+    /** Main-confined completion of the in-flight queued write. */
+    private fun completeCurrentWrite(uuid: UUID, status: Int) {
+        val req = currentWrite ?: return
+        if (req.uuid != uuid) return
+        currentWrite = null
+        req.onResult(status == BluetoothGatt.GATT_SUCCESS)
         processCharacteristicWriteQueue()
     }
 
@@ -508,6 +526,7 @@ class BleConnectionManager(private val context: Context) {
                 }
             } else {
                 failWrite(req, "writeCharacteristic rejected after $MAX_WRITE_ATTEMPTS attempts")
+                processCharacteristicWriteQueue()
             }
         }
     }

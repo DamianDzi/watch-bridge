@@ -9,7 +9,6 @@ import android.util.Log
 import androidx.health.services.client.HealthServices
 import androidx.health.services.client.PassiveListenerCallback
 import androidx.health.services.client.awaitWithException
-import androidx.health.services.client.clearPassiveListenerCallback
 import androidx.health.services.client.data.DataPoint
 import androidx.health.services.client.data.DataType
 import androidx.health.services.client.data.DataPointContainer
@@ -83,12 +82,12 @@ class HealthServicesCollector(
     }
 
     fun stop() {
-        scope.launch {
-            try {
-                passiveClient.clearPassiveListenerCallback()
-            } catch (e: Exception) {
-                Log.w(TAG, "clearPassiveListenerCallback failed: ${e.message}")
-            }
+        // Synchronous: the service scope is about to be cancelled, so a
+        // scope.launch'd clear would never run (LOW-1).
+        try {
+            passiveClient.clearPassiveListenerCallbackAsync()
+        } catch (e: Exception) {
+            Log.w(TAG, "clearPassiveListenerCallbackAsync failed: ${e.message}")
         }
         try {
             context.unregisterReceiver(batteryReceiver)
@@ -121,16 +120,19 @@ class HealthServicesCollector(
     }
 
     private fun DataPoint.toEntity(): HealthRecordEntity? {
+        // DataType does not override equals() in health-services-client 1.1.0
+        // (verified against the AAR), so `when (dataType)` would be identity
+        // comparison — compare by name instead.
         return when (this) {
-            is SampleDataPoint<*> -> when (dataType) {
-                DataType.HEART_RATE_BPM -> {
+            is SampleDataPoint<*> -> when (dataType.name) {
+                DataType.HEART_RATE_BPM.name -> {
                     val bpm = (value as? Long)?.toInt() ?: return null
                     HealthRecordMapper.heartRate(bpm, timeInstant.toEpochMilli())
                 }
                 else -> null
             }
-            is IntervalDataPoint<*> -> when (dataType) {
-                DataType.STEPS -> {
+            is IntervalDataPoint<*> -> when (dataType.name) {
+                DataType.STEPS.name -> {
                     val count = (value as? Long) ?: return null
                     HealthRecordMapper.steps(
                         count,
