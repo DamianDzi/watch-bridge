@@ -42,10 +42,24 @@ class AncsConnectionService : ConnectionService() {
         }
 
         /**
+         * Some Wear OS devices (e.g. OnePlus Watch 3) lack the Telecom feature
+         * entirely — registerPhoneAccount/addNewIncomingCall throw
+         * UnsupportedOperationException there and would crash the service.
+         */
+        fun telecomSupported(context: Context): Boolean =
+            context.packageManager.hasSystemFeature("android.software.telecom")
+
+        /**
          * Register the PhoneAccount with TelecomManager. Must be called once
-         * (e.g., on app startup or service start).
+         * (e.g., on app startup or service start). No-op on devices without
+         * Telecom — calls fall back to IncomingCallActivity + CallStyle
+         * notification, and decline still works via ANCS actions.
          */
         fun registerPhoneAccount(context: Context) {
+            if (!telecomSupported(context)) {
+                Log.i(TAG, "Telecom feature unavailable — skipping PhoneAccount registration")
+                return
+            }
             val handle = getPhoneAccountHandle(context)
             val account = PhoneAccount.builder(handle, "WearBridge")
                 .setCapabilities(PhoneAccount.CAPABILITY_SELF_MANAGED)
@@ -66,6 +80,10 @@ class AncsConnectionService : ConnectionService() {
             callerName: String,
             appName: String
         ) {
+            if (!telecomSupported(context)) {
+                Log.i(TAG, "Telecom feature unavailable — incoming call handled by activity/notification fallback only")
+                return
+            }
             val handle = getPhoneAccountHandle(context)
             val extras = Bundle().apply {
                 putLong(EXTRA_NOTIFICATION_UID, notificationUid)
