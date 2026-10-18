@@ -54,8 +54,10 @@ dependencies {
     // Compose for Wear OS
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))
     implementation("androidx.wear.compose:compose-material3:1.0.0-alpha29")
-    implementation("androidx.wear.compose:compose-foundation:1.4.1")
-    implementation("androidx.wear.compose:compose-navigation:1.4.1")
+    // 1.5.x guards the reduce_motion Settings.Global read that throws
+    // SecurityException for targetSdk 35+ (UI crashed at first layout on 1.4.1)
+    implementation("androidx.wear.compose:compose-foundation:1.5.6")
+    implementation("androidx.wear.compose:compose-navigation:1.5.6")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
