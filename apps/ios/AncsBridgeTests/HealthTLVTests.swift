@@ -320,6 +320,77 @@ final class HealthTLVTests: XCTestCase {
         let truncated = encoded.prefix(encoded.count - 2)
         XCTAssertThrowsError(try HealthControlCodec.decode(truncated))
     }
+
+    // MARK: - Watch app list control messages
+
+    func testAppListSingleChunkGoldenBytes() throws {
+        let apps = [
+            RemoteAppInfo(packageName: "com.spotify.music", label: "Spotify"),
+            RemoteAppInfo(packageName: "com.drillyapps.babydaybook", label: "Baby Daybook")
+        ]
+        let encoded = HealthControlCodec.encode(.appList(chunkIndex: 0, isFinal: true, entries: apps))
+
+        var expected = TestWriter()
+        expected.u8(0x0A)
+        expected.u8(0)
+        expected.u8(1)
+        let pkg = Array("com.spotify.music".utf8)
+        expected.u16(UInt16(pkg.count)); expected.data.append(contentsOf: pkg)
+        let label = Array("Spotify".utf8)
+        expected.u16(UInt16(label.count)); expected.data.append(contentsOf: label)
+        let bdb = Array("com.drillyapps.babydaybook".utf8)
+        expected.u16(UInt16(bdb.count)); expected.data.append(contentsOf: bdb)
+        let bdbLabel = Array("Baby Daybook".utf8)
+        expected.u16(UInt16(bdbLabel.count)); expected.data.append(contentsOf: bdbLabel)
+        XCTAssertEqual(encoded, expected.data)
+
+        guard case .appList(let chunkIndex, let isFinal, let decoded) = try HealthControlCodec.decode(encoded) else {
+            return XCTFail("expected appList")
+        }
+        XCTAssertEqual(chunkIndex, 0)
+        XCTAssertTrue(isFinal)
+        XCTAssertEqual(decoded, apps)
+    }
+
+    func testAppListAssemblerReassemblyAndReset() {
+        var assembler = AppListAssembler()
+        let a = RemoteAppInfo(packageName: "com.a", label: "A")
+        let b = RemoteAppInfo(packageName: "com.b", label: "B")
+        let c = RemoteAppInfo(packageName: "com.c", label: "C")
+
+        // Fresh assembler expects chunk 0; a mid-sequence chunk resets.
+        XCTAssertEqual(assembler.feed(chunkIndex: 1, isFinal: false, entries: [a]), .reset)
+
+        // Normal reassembly: 0 (partial) → 1 (final).
+        XCTAssertEqual(assembler.feed(chunkIndex: 0, isFinal: false, entries: [a, b]), .accumulated)
+        XCTAssertEqual(assembler.feed(chunkIndex: 1, isFinal: true, entries: [c]), .complete([a, b, c]))
+
+        // A new list can start again from 0 after completion.
+        XCTAssertEqual(assembler.feed(chunkIndex: 0, isFinal: true, entries: [a]), .complete([a]))
+
+        // Sequence break mid-assembly discards the partial list.
+        XCTAssertEqual(assembler.feed(chunkIndex: 0, isFinal: false, entries: [a, b]), .accumulated)
+        XCTAssertEqual(assembler.feed(chunkIndex: 5, isFinal: false, entries: [c]), .reset)
+        XCTAssertEqual(assembler.feed(chunkIndex: 0, isFinal: true, entries: [c]), .complete([c]))
+    }
+
+    func testRejectsMalformedAppList() throws {
+        // Truncated entry: cut inside the label bytes
+        let encoded = HealthControlCodec.encode(
+            .appList(chunkIndex: 0, isFinal: true,
+                     entries: [RemoteAppInfo(packageName: "com.spotify.music", label: "Spotify")])
+        )
+        let truncated = encoded.prefix(encoded.count - 3)
+        XCTAssertThrowsError(try HealthControlCodec.decode(truncated))
+
+        // APP_LIST_REQ must have an empty body
+        let req = HealthControlCodec.encode(.appListReq)
+        XCTAssertEqual(req, Data([0x09]))
+        XCTAssertThrowsError(try HealthControlCodec.decode(Data([0x09, 0x00])))
+        guard case .appListReq = try HealthControlCodec.decode(req) else {
+            return XCTFail("expected appListReq")
+        }
+    }
 }
 
 /// Watermark persistence: load/advance/reload, monotonic guard, nonce isolation.

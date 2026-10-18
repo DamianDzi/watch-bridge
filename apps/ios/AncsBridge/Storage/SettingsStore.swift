@@ -9,6 +9,8 @@ class SettingsStore: ObservableObject {
         static let pairedDevices = "pairedDevices"
         static let liveCallStatus = "liveCallStatus"
         static let remoteTriggers = "remoteTriggers"
+        static let watchApps = "watchApps"
+        static let watchAppsFetchedAt = "watchAppsFetchedAt"
     }
 
     @Published var autoAdvertise: Bool {
@@ -23,6 +25,20 @@ class SettingsStore: ObservableObject {
                 defaults.set(data, forKey: Keys.remoteTriggers)
             }
         }
+    }
+
+    /// Last watch app list fetched over BLE (protocol §Watch app list) —
+    /// the picker works offline from this cache. `watchAppsFetchedAt` shows
+    /// its age.
+    @Published var watchApps: [RemoteAppInfo] {
+        didSet {
+            if let data = try? JSONEncoder().encode(watchApps) {
+                defaults.set(data, forKey: Keys.watchApps)
+            }
+        }
+    }
+    @Published var watchAppsFetchedAt: Date? {
+        didSet { defaults.set(watchAppsFetchedAt, forKey: Keys.watchAppsFetchedAt) }
     }
 
     /// When enabled, uses CallKit to monitor phone call state and pushes
@@ -41,6 +57,13 @@ class SettingsStore: ObservableObject {
         } else {
             self.remoteTriggers = []
         }
+        if let data = defaults.data(forKey: Keys.watchApps),
+           let apps = try? JSONDecoder().decode([RemoteAppInfo].self, from: data) {
+            self.watchApps = apps
+        } else {
+            self.watchApps = []
+        }
+        self.watchAppsFetchedAt = defaults.object(forKey: Keys.watchAppsFetchedAt) as? Date
         // Default to false — discoverability only via Add New Watch flow
         if !defaults.contains(key: Keys.autoAdvertise) {
             self.autoAdvertise = false

@@ -50,5 +50,9 @@ targets:
     platform: iOS
     sources:
       - AncsBridgeTests
+    settings:
+      base:
+        # Xcode 27 requires an Info.plist for the test bundle's code signing
+        GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: AncsBridge

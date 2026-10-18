@@ -74,6 +74,8 @@ enum HealthControlCommand: UInt8 {
     case triggerList = 6      // iOS → watch: full trigger list
     case triggerFire = 7      // iOS → watch: execute stored trigger by index
     case triggerResult = 8    // watch → iOS: execution outcome
+    case appListReq = 9       // iOS → watch: request the launchable-app list
+    case appList = 10         // watch → iOS: one paged chunk of that list
 }
 
 enum HealthControlMessage {
@@ -85,6 +87,8 @@ enum HealthControlMessage {
     case triggerList(triggers: [RemoteTrigger])
     case triggerFire(index: UInt8)
     case triggerResult(index: UInt8, result: UInt8)
+    case appListReq
+    case appList(chunkIndex: UInt8, isFinal: Bool, entries: [RemoteAppInfo])
 }
 
 /// One stored remote trigger (protocol §Remote triggers). `index` is the
@@ -102,6 +106,51 @@ enum RemoteTriggerResult: UInt8 {
     case noSuchTrigger = 1
     case launchFailed = 2
     case blockedBySystem = 3
+}
+
+/// One launchable app on the watch (APP_LIST entries; protocol §Watch app
+/// list) — the picker source for new package triggers.
+struct RemoteAppInfo: Equatable, Codable {
+    let packageName: String
+    let label: String
+}
+
+/// Reassembles paged APP_LIST chunks. Chunk 0 starts a fresh assembly; a
+/// chunk whose index is not expected+1 resets the partial list; `isFinal`
+/// flushes it. Pure value type — unit-tested in HealthTLVTests.
+struct AppListAssembler {
+    enum FeedResult: Equatable {
+        case accumulated
+        case complete([RemoteAppInfo])
+        case reset
+    }
+
+    private(set) var entries: [RemoteAppInfo] = []
+    private var nextIndex: UInt8 = 0
+    private var active = false
+
+    mutating func feed(chunkIndex: UInt8, isFinal: Bool, entries chunkEntries: [RemoteAppInfo]) -> FeedResult {
+        let expected: UInt8 = active ? nextIndex : 0
+        guard chunkIndex == expected else {
+            reset()
+            return .reset
+        }
+        entries.append(contentsOf: chunkEntries)
+        if isFinal {
+            let result = entries
+            reset()
+            return .complete(result)
+        }
+        active = true
+        nextIndex = chunkIndex &+ 1
+        return .accumulated
+    }
+
+    private mutating func reset() {
+        entries = []
+        nextIndex = 0
+        active = false
+    }
 }
 
 // MARK: - Errors
@@ -340,6 +389,16 @@ enum HealthControlCodec {
             w.writeU8(HealthControlCommand.triggerResult.rawValue)
             w.writeU8(index)
             w.writeU8(result)
+        case .appListReq:
+            w.writeU8(HealthControlCommand.appListReq.rawValue)
+        case .appList(let chunkIndex, let isFinal, let entries):
+            w.writeU8(HealthControlCommand.appList.rawValue)
+            w.writeU8(chunkIndex)
+            w.writeU8(isFinal ? 1 : 0)
+            for app in entries {
+                w.writeUTF8(app.packageName)
+                w.writeUTF8(app.label)
+            }
         }
         return w.data
     }
@@ -383,6 +442,27 @@ enum HealthControlCodec {
             return .triggerFire(index: try r.readU8())
         case .triggerResult:
             return .triggerResult(index: try r.readU8(), result: try r.readU8())
+        case .appListReq:
+            // Empty body only — anything else is a malformed message.
+            guard r.remaining == 0 else { throw HealthTLVError.badControlMessage }
+            return .appListReq
+        case .appList:
+            let chunkIndex = try r.readU8()
+            let finalRaw = try r.readU8()
+            guard finalRaw <= 1 else { throw HealthTLVError.badControlMessage }
+            var entries: [RemoteAppInfo] = []
+            while r.remaining > 0 {
+                let pkgLen = Int(try r.readU16())
+                guard let pkg = String(data: try r.readBytes(pkgLen), encoding: .utf8) else {
+                    throw HealthTLVError.badControlMessage
+                }
+                let labelLen = Int(try r.readU16())
+                guard let label = String(data: try r.readBytes(labelLen), encoding: .utf8) else {
+                    throw HealthTLVError.badControlMessage
+                }
+                entries.append(RemoteAppInfo(packageName: pkg, label: label))
+            }
+            return .appList(chunkIndex: chunkIndex, isFinal: finalRaw == 1, entries: entries)
         }
         if r.remaining != 0 { throw HealthTLVError.badControlMessage }
     }

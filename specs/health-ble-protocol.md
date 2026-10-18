@@ -57,6 +57,8 @@ PONG          = 0x05                                                            
 TRIGGER_LIST  = 0x06, count u8, then per trigger: index u8, kind u8, len u16, payload utf8   (iOS → watch)
 TRIGGER_FIRE  = 0x07, index u8                                                  (iOS → watch)
 TRIGGER_RESULT= 0x08, index u8, result u8                                       (watch → iOS)
+APP_LIST_REQ  = 0x09                                                            (iOS → watch; empty body)
+APP_LIST      = 0x0A, chunk_index u8, is_final u8, then entries until the chunk's byte cap   (watch → iOS)
 ```
 
 ### Remote triggers
@@ -64,6 +66,12 @@ TRIGGER_RESULT= 0x08, index u8, result u8                                       
 `TRIGGER_LIST` replaces the watch's whole stored trigger list (sent after every HELLO and whenever the user edits the list). Trigger kinds: `0` = launch Android package (payload = package name, e.g. `com.spotify.music`), `1` = deep link (payload = URI). **The watch executes only triggers from its stored list — `TRIGGER_FIRE` carries an index, never a raw payload off the wire.** The watch persists the list (SharedPreferences) across reboots. `TRIGGER_LIST` total size must stay ≤ one B5 notification (≤ 509 B; iOS caps the list accordingly).
 
 `TRIGGER_RESULT.result`: `0` launched, `1` no such trigger, `2` launch failed (no activity for package / no handler for URI), `3` blocked by system (background-activity-launch restriction — watch posted a one-tap fallback notification instead).
+
+### Watch app list (picker source)
+
+`APP_LIST_REQ` (empty body) makes the watch reply with its launchable apps as one or more `APP_LIST` writes on …B5. Entry = `[u16 pkg_len][utf8 package][u16 label_len][utf8 label]`; watch sends apps with a MAIN/LAUNCHER intent (excluding itself), label falling back to the package name, sorted by label case-insensitively. A full list usually exceeds one write, so it is **paged**: each write = `[u8 0x0A][u8 chunk_index][u8 is_final]` + as many entries as fit in ≤ 480 B total. chunk_index starts at 0 and increments; the final chunk has `is_final = 1`. The watch enqueues all chunks in order through its serialized write queue so chunks can't reorder.
+
+iOS reassembles: chunk 0 starts a fresh assembly; a chunk whose index ≠ expected+1 resets the partial list (the UI offers a retry); `is_final` flushes the assembled list; a ~5 s timeout aborts a stalled fetch. An empty final chunk is valid (watch has no other launchable apps).
 
 `install_nonce` = random u32 generated once per watch-app install and persisted (used by iOS to key its dedupe watermark — a watch reinstall resets record IDs to 1 and must not collide with the old watermark).
 

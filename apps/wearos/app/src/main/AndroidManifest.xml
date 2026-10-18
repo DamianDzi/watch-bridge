@@ -33,6 +33,15 @@
     <!-- OnePlus Watch 3: aggressive battery management kills background BLE -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
+    <!-- Package visibility (API 30+): see other apps' launcher activities for
+         the APP_LIST response without QUERY_ALL_PACKAGES. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
     <application
         android:name=".AncsApplication"
         android:allowBackup="true"

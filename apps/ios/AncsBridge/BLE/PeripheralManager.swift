@@ -21,6 +21,9 @@ class PeripheralManager: NSObject, ObservableObject {
     @Published var isAdvertising = false
     @Published var bluetoothState: CBManagerState = .unknown
     @Published var discoveredWatches: [DiscoveredWatch] = []
+    /// True while a watch holds a subscription to the health-control
+    /// characteristic — the practical "bridge connected" signal for UI.
+    @Published private(set) var isWatchSubscribed = false
 
     let settingsStore = SettingsStore()
 
@@ -83,6 +86,11 @@ class PeripheralManager: NSObject, ObservableObject {
         // Remote triggers live in SettingsStore; pushed after HELLO and on edits
         healthSyncManager.triggersProvider = { [weak self] in
             self?.settingsStore.remoteTriggers ?? []
+        }
+        // Fetched watch-app lists persist via SettingsStore (picker cache)
+        healthSyncManager.appListPersister = { [weak self] apps in
+            self?.settingsStore.watchApps = apps
+            self?.settingsStore.watchAppsFetchedAt = Date()
         }
         // Start/stop based on setting
         updateCallStateObserving()
@@ -329,10 +337,16 @@ extension PeripheralManager: CBPeripheralManagerDelegate {
 
     func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral, didSubscribeTo characteristic: CBCharacteristic) {
         logger.info("Central subscribed: \(central.identifier)")
+        if characteristic.uuid == BLEConstants.healthControlCharacteristicUUID {
+            isWatchSubscribed = true
+        }
     }
 
     func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral, didUnsubscribeFrom characteristic: CBCharacteristic) {
         logger.info("Central unsubscribed: \(central.identifier)")
+        if characteristic.uuid == BLEConstants.healthControlCharacteristicUUID {
+            isWatchSubscribed = false
+        }
     }
 
     func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveRead request: CBATTRequest) {

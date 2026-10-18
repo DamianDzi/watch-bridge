@@ -11,6 +11,7 @@ import com.wearos.ancsbridge.R
 import com.wearos.ancsbridge.ble.AncsConstants
 import com.wearos.ancsbridge.ble.BleConnectionManager
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
@@ -64,7 +65,38 @@ class RemoteTriggerManager(
                 Log.i(TAG, "Trigger list updated: ${triggers.size} triggers")
             }
             is HealthTlv.ControlMessage.TriggerFire -> fire(message.index)
+            is HealthTlv.ControlMessage.AppListReq -> sendAppList()
             else -> Unit // health-sync messages handled elsewhere
+        }
+    }
+
+    /**
+     * APP_LIST_REQ: report the watch's launchable apps back as ordered
+     * APP_LIST chunks (protocol §Watch app list). Query + encode on IO; the
+     * chunk writes go through the serialized queue so they cannot reorder.
+     */
+    private fun sendAppList() {
+        scope.launch(Dispatchers.IO) {
+            val pm = context.packageManager
+            val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+            val seen = mutableSetOf<String>()
+            val apps = try {
+                pm.queryIntentActivities(launcherIntent, 0)
+                    .asSequence()
+                    .map { it.activityInfo.packageName to it.loadLabel(pm).toString() }
+                    .filter { (pkg, _) -> pkg != context.packageName && seen.add(pkg) }
+                    .map { (pkg, label) -> HealthTlv.AppInfo(pkg, label.ifEmpty { pkg }) }
+                    .sortedWith(compareBy { it.label.lowercase() })
+                    .toList()
+            } catch (e: Exception) {
+                Log.w(TAG, "App list query failed: ${e.message}")
+                emptyList()
+            }
+            val chunks = HealthTlv.appListChunks(apps)
+            Log.i(TAG, "APP_LIST: ${apps.size} launchable apps in ${chunks.size} chunk(s)")
+            chunks.forEach { chunk ->
+                ble.enqueueWrite(AncsConstants.HEALTH_CONTROL_CHARACTERISTIC_UUID, chunk)
+            }
         }
     }
 

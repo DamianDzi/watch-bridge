@@ -32,6 +32,10 @@ final class HealthSyncManager: ObservableObject {
     /// pushed to the watch after every HELLO and on edits.
     var triggersProvider: (() -> [RemoteTrigger])?
 
+    /// Persists fetched watch-app lists (owned by SettingsStore) so the
+    /// trigger picker works offline with the last-known list.
+    var appListPersister: (([RemoteAppInfo]) -> Void)?
+
     @Published private(set) var isHealthKitAuthorized = false
     @Published private(set) var lastSync: Date?
     @Published private(set) var recordsWritten = 0
@@ -40,6 +44,9 @@ final class HealthSyncManager: ObservableObject {
     @Published private(set) var lastBatteryPercent: UInt8?
     @Published private(set) var lastError: String?
     @Published private(set) var lastTriggerOutcome: TriggerOutcome?
+    @Published private(set) var watchApps: [RemoteAppInfo] = []
+    @Published private(set) var isFetchingWatchApps = false
+    @Published private(set) var watchAppsFetchedAt: Date?
 
     struct TriggerOutcome: Equatable {
         let index: UInt8
@@ -48,6 +55,12 @@ final class HealthSyncManager: ObservableObject {
     }
 
     private var installNonce: UInt32?
+
+    /// APP_LIST chunk reassembly (protocol §Watch app list).
+    private var appListAssembler = AppListAssembler()
+    private var appListTimeout: DispatchWorkItem?
+
+    private static let appListTimeoutSeconds: TimeInterval = 5
 
     /// Workout under construction: header arrived, stream chunks accumulating.
     private final class PendingWorkout {
@@ -103,8 +116,10 @@ final class HealthSyncManager: ObservableObject {
                 }
             case .ack, .timeSync, .pong:
                 logger.warning("Unexpected control message from watch (iOS-only command)")
-            case .triggerList, .triggerFire:
+            case .triggerList, .triggerFire, .appListReq:
                 logger.warning("Unexpected control message from watch (watch-only command)")
+            case .appList(let chunkIndex, let isFinal, let entries):
+                handleAppListChunk(chunkIndex: chunkIndex, isFinal: isFinal, entries: entries)
             }
         } catch {
             reportError("Bad control message: \(error)")
@@ -128,6 +143,53 @@ final class HealthSyncManager: ObservableObject {
     /// Fires a stored trigger on the watch; feedback arrives via lastTriggerOutcome.
     func fireTrigger(_ index: UInt8) {
         _ = channel?.sendHealthControl(HealthControlCodec.encode(.triggerFire(index: index)))
+    }
+
+    // MARK: - Watch app list (picker source)
+
+    /// Asks the watch for its launchable apps; the answer streams back as
+    /// APP_LIST chunks and lands in `watchApps`. Aborts after ~5 s.
+    func requestAppList() {
+        guard let channel = channel else { return }
+        isFetchingWatchApps = true
+        appListAssembler = AppListAssembler()
+        let sent = channel.sendHealthControl(HealthControlCodec.encode(.appListReq))
+        if !sent {
+            isFetchingWatchApps = false
+            reportError("Cannot request the app list — not connected")
+            return
+        }
+        let timeout = DispatchWorkItem { [weak self] in
+            guard let self = self, self.isFetchingWatchApps else { return }
+            self.isFetchingWatchApps = false
+            self.appListAssembler = AppListAssembler()
+            self.reportError("App list timed out — is the watch connected and the app open?")
+        }
+        appListTimeout?.cancel()
+        appListTimeout = timeout
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.appListTimeoutSeconds, execute: timeout)
+    }
+
+    private func handleAppListChunk(chunkIndex: UInt8, isFinal: Bool, entries: [RemoteAppInfo]) {
+        switch appListAssembler.feed(chunkIndex: chunkIndex, isFinal: isFinal, entries: entries) {
+        case .accumulated:
+            logger.debug("App list chunk \(chunkIndex): \(entries.count) entries, more to come")
+        case .reset:
+            appListTimeout?.cancel()
+            appListTimeout = nil
+            DispatchQueue.main.async { self.isFetchingWatchApps = false }
+            reportError("App list chunks arrived out of order — tap refresh to retry")
+        case .complete(let apps):
+            appListTimeout?.cancel()
+            appListTimeout = nil
+            logger.info("App list complete: \(apps.count) apps")
+            DispatchQueue.main.async {
+                self.appListPersister?(apps)
+                self.watchApps = apps
+                self.watchAppsFetchedAt = Date()
+                self.isFetchingWatchApps = false
+            }
+        }
     }
 
     // MARK: - Data characteristic (B6) writes from the watch

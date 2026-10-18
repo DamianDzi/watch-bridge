@@ -64,6 +64,8 @@ object HealthTlv {
     const val CMD_TRIGGER_LIST = 0x06
     const val CMD_TRIGGER_FIRE = 0x07
     const val CMD_TRIGGER_RESULT = 0x08
+    const val CMD_APP_LIST_REQ = 0x09
+    const val CMD_APP_LIST = 0x0A
 
     // Remote trigger kinds (TRIGGER_LIST)
     const val TRIGGER_KIND_PACKAGE = 0
@@ -77,6 +79,9 @@ object HealthTlv {
 
     /** TRIGGER_LIST must fit one B5 notification; 500 B leaves room for the command framing. */
     const val MAX_TRIGGER_LIST_BYTES = 500
+
+    /** One APP_LIST chunk write (cmd + chunk_index + is_final + entries) stays at or under this. */
+    const val MAX_APP_LIST_CHUNK_BYTES = 480
 
     const val MAX_ACK_IDS = 63
     const val MAX_GPS_POINTS_PER_RECORD = 255
@@ -182,10 +187,15 @@ object HealthTlv {
         data class TriggerList(val triggers: List<Trigger>) : ControlMessage()
         data class TriggerFire(val index: Int) : ControlMessage()
         data class TriggerResult(val index: Int, val result: Int) : ControlMessage()
+        object AppListReq : ControlMessage()
+        data class AppList(val chunkIndex: Int, val isFinal: Boolean, val entries: List<AppInfo>) : ControlMessage()
     }
 
     /** One entry of the watch's stored remote-trigger list (see protocol §Remote triggers). */
     data class Trigger(val index: Int, val kind: Int, val payload: String)
+
+    /** One launchable app on the watch (APP_LIST entries; see protocol §Watch app list). */
+    data class AppInfo(val packageName: String, val label: String)
 
     // ---- Encoding ----------------------------------------------------------
 
@@ -320,6 +330,51 @@ object HealthTlv {
 
     fun triggerFire(index: Int): ByteArray = byteArrayOf(CMD_TRIGGER_FIRE.toByte(), index.toByte())
 
+    /** Encoder for the iOS-only APP_LIST_REQ (exists to pin golden vectors in tests). */
+    fun appListReq(): ByteArray = byteArrayOf(CMD_APP_LIST_REQ.toByte())
+
+    /**
+     * Splits the watch's launchable apps into APP_LIST chunk writes, each
+     * ≤ maxBytes TOTAL (cmd + chunk_index + is_final + entries). Entries never
+     * straddle chunks. An empty list yields one empty final chunk so the iOS
+     * side always gets a definite response. A single entry longer than the cap
+     * becomes its own oversized chunk (labels are short; unreachable in
+     * practice).
+     */
+    fun appListChunks(apps: List<AppInfo>, maxBytes: Int = MAX_APP_LIST_CHUNK_BYTES): List<ByteArray> {
+        fun entrySize(app: AppInfo) =
+            4 + app.packageName.toByteArray(Charsets.UTF_8).size + app.label.toByteArray(Charsets.UTF_8).size
+
+        val groups = mutableListOf<List<AppInfo>>()
+        var current = mutableListOf<AppInfo>()
+        var currentSize = 3 // cmd + chunk_index + is_final
+        for (app in apps) {
+            val size = entrySize(app)
+            if (current.isNotEmpty() && currentSize + size > maxBytes) {
+                groups += current
+                current = mutableListOf()
+                currentSize = 3
+            }
+            current += app
+            currentSize += size
+        }
+        if (current.isNotEmpty() || groups.isEmpty()) groups += current
+
+        return groups.mapIndexed { i, group ->
+            ByteWriter(3 + group.sumOf { entrySize(it) }).apply {
+                u8(CMD_APP_LIST)
+                u8(i)
+                u8(if (i == groups.size - 1) 1 else 0)
+                group.forEach {
+                    val pkg = it.packageName.toByteArray(Charsets.UTF_8)
+                    val label = it.label.toByteArray(Charsets.UTF_8)
+                    u16(pkg.size); bytes(pkg)
+                    u16(label.size); bytes(label)
+                }
+            }.toByteArray()
+        }
+    }
+
     // ---- Decoding (unit tests + iOS-side mirror) -----------------------------
 
     fun decodeBatch(bytes: ByteArray): List<WireRecord> {
@@ -390,6 +445,20 @@ object HealthTlv {
             }
             CMD_TRIGGER_FIRE -> ControlMessage.TriggerFire(r.u8())
             CMD_TRIGGER_RESULT -> ControlMessage.TriggerResult(r.u8(), r.u8())
+            CMD_APP_LIST_REQ -> ControlMessage.AppListReq
+            CMD_APP_LIST -> {
+                val chunkIndex = r.u8()
+                val isFinal = r.u8() != 0
+                val entries = mutableListOf<AppInfo>()
+                while (r.remaining() > 0) {
+                    val pkgLen = r.u16()
+                    val pkg = String(r.bytes(pkgLen), Charsets.UTF_8)
+                    val labelLen = r.u16()
+                    val label = String(r.bytes(labelLen), Charsets.UTF_8)
+                    entries += AppInfo(pkg, label)
+                }
+                ControlMessage.AppList(chunkIndex, isFinal, entries)
+            }
             else -> throw CodecException("unknown control command $cmd")
         }.also { if (r.remaining() != 0) throw CodecException("trailing bytes in control message") }
     }

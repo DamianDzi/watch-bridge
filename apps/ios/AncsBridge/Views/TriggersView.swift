@@ -50,7 +50,16 @@ struct TriggersView: View {
             }
         }
         .sheet(isPresented: $showingAddSheet) {
-            AddTriggerView { kind, payload in
+            AddTriggerView(
+                cachedApps: viewModel.peripheralManager.settingsStore.watchApps,
+                cachedAt: viewModel.peripheralManager.settingsStore.watchAppsFetchedAt
+                    ?? viewModel.peripheralManager.healthSyncManager.watchAppsFetchedAt,
+                isWatchConnected: viewModel.peripheralManager.isWatchSubscribed,
+                onRefresh: {
+                    viewModel.peripheralManager.healthSyncManager.requestAppList()
+                },
+                isFetching: viewModel.peripheralManager.healthSyncManager.isFetchingWatchApps
+            ) { kind, payload in
                 addTrigger(kind: kind, payload: payload)
             }
         }
@@ -113,26 +122,51 @@ private struct AddTriggerView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var kind: UInt8 = 0
     @State private var payload = ""
+    @State private var manualEntry = false
+    @State private var searchText = ""
 
-    var onAdd: (UInt8, String) -> Void
+    /// Cached watch app list (SettingsStore) — the picker works offline.
+    let cachedApps: [RemoteAppInfo]
+    let cachedAt: Date?
+    let isWatchConnected: Bool
+    let onRefresh: () -> Void
+    let isFetching: Bool
+    let onAdd: (UInt8, String) -> Void
+
+    private var sortedApps: [RemoteAppInfo] {
+        cachedApps.sorted { $0.label.lowercased() < $1.label.lowercased() }
+    }
+
+    private var filteredApps: [RemoteAppInfo] {
+        let query = searchText.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !query.isEmpty else { return sortedApps }
+        return sortedApps.filter {
+            $0.label.lowercased().contains(query) || $0.packageName.lowercased().contains(query)
+        }
+    }
 
     var body: some View {
         NavigationStack {
             Form {
                 Picker("Type", selection: $kind) {
-                    Text("Launch watch app (package)").tag(UInt8(0))
+                    Text("Launch watch app").tag(UInt8(0))
                     Text("Open deep link (URI)").tag(UInt8(1))
                 }
-                TextField(
-                    kind == 0 ? "com.spotify.music" : "babydaybook://log/feeding",
-                    text: $payload
-                )
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
-                Section {
-                    Text("Find the package name in the watch's Play Store page URL (after ?id=).")
-                        .font(.footnote)
-                        .foregroundColor(.secondary)
+
+                if kind == 0 {
+                    appPickerSection
+                } else {
+                    TextField(
+                        "babydaybook://log/feeding",
+                        text: $payload
+                    )
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    Section {
+                        Text("The watch opens this URI with the app that handles it.")
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                    }
                 }
             }
             .navigationTitle("New Trigger")
@@ -149,5 +183,81 @@ private struct AddTriggerView: View {
                 }
             }
         }
+    }
+
+    private var appPickerSection: some View {
+        Section {
+            if manualEntry {
+                TextField("com.spotify.music", text: $payload)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+            } else {
+                TextField("Search apps", text: $searchText)
+                    .autocorrectionDisabled()
+                if sortedApps.isEmpty {
+                    Text("No watch app list yet. Tap the ↻ button with the watch connected, or enter the package manually.")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                } else {
+                    ForEach(filteredApps, id: \.packageName) { app in
+                        Button {
+                            payload = app.packageName
+                        } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(app.label)
+                                        .font(.subheadline)
+                                        .foregroundColor(.primary)
+                                    Text(app.packageName)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                Spacer()
+                                if payload == app.packageName {
+                                    Image(systemName: "checkmark")
+                                        .foregroundColor(.orange)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Toggle("Enter package manually", isOn: $manualEntry)
+
+            HStack {
+                if let cachedAt, !manualEntry {
+                    Text("Fetched \(Self.relativeTime(cachedAt)) ago")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+                Button {
+                    onRefresh()
+                } label: {
+                    if isFetching {
+                        ProgressView()
+                    } else {
+                        Label("Refresh", systemImage: "arrow.clockwise")
+                    }
+                }
+                .disabled(!isWatchConnected || isFetching)
+            }
+        } header: {
+            Text("Watch apps")
+        } footer: {
+            if !isWatchConnected {
+                Text("Watch not connected — refresh needs the bridge link up.")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+
+    private static func relativeTime(_ date: Date) -> String {
+        let seconds = max(0, Int(Date().timeIntervalSince(date)))
+        if seconds < 60 { return "\(seconds)s" }
+        if seconds < 3600 { return "\(seconds / 60)m" }
+        return "\(seconds / 3600)h"
     }
 }
