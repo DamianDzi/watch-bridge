@@ -267,6 +267,59 @@ final class HealthTLVTests: XCTestCase {
     func testControlBadMessageThrows() {
         XCTAssertThrowsError(try HealthControlCodec.decode(Data([0xFF])))
     }
+
+    // MARK: - Remote trigger control messages
+
+    func testTriggerListGoldenBytes() throws {
+        let triggers = [
+            RemoteTrigger(index: 0, kind: 0, payload: "com.spotify.music"),
+            RemoteTrigger(index: 1, kind: 1, payload: "babydaybook://log/feeding")
+        ]
+        let encoded = HealthControlCodec.encode(.triggerList(triggers: triggers))
+
+        var expected = TestWriter()
+        expected.u8(0x06)
+        expected.u8(2)
+        expected.u8(0); expected.u8(0)
+        let pkg = Array("com.spotify.music".utf8)
+        expected.u16(UInt16(pkg.count)); expected.data.append(contentsOf: pkg)
+        expected.u8(1); expected.u8(1)
+        let uri = Array("babydaybook://log/feeding".utf8)
+        expected.u16(UInt16(uri.count)); expected.data.append(contentsOf: uri)
+        XCTAssertEqual(encoded, expected.data)
+
+        guard case .triggerList(let decoded) = try HealthControlCodec.decode(encoded) else {
+            return XCTFail("expected triggerList")
+        }
+        XCTAssertEqual(decoded, triggers)
+    }
+
+    func testTriggerFireAndResultGoldenBytes() throws {
+        let fire = HealthControlCodec.encode(.triggerFire(index: 1))
+        XCTAssertEqual(fire, Data([0x07, 1]))
+        if case .triggerFire(let index) = try HealthControlCodec.decode(fire) {
+            XCTAssertEqual(index, 1)
+        } else {
+            XCTFail("expected triggerFire")
+        }
+
+        let result = HealthControlCodec.encode(.triggerResult(index: 1, result: 3))
+        XCTAssertEqual(result, Data([0x08, 1, 3]))
+        if case .triggerResult(let index, let code) = try HealthControlCodec.decode(result) {
+            XCTAssertEqual(index, 1)
+            XCTAssertEqual(code, 3)
+        } else {
+            XCTFail("expected triggerResult")
+        }
+    }
+
+    func testRejectsTruncatedTriggerList() {
+        let encoded = HealthControlCodec.encode(
+            .triggerList(triggers: [RemoteTrigger(index: 0, kind: 0, payload: "com.x")])
+        )
+        let truncated = encoded.prefix(encoded.count - 2)
+        XCTAssertThrowsError(try HealthControlCodec.decode(truncated))
+    }
 }
 
 /// Watermark persistence: load/advance/reload, monotonic guard, nonce isolation.

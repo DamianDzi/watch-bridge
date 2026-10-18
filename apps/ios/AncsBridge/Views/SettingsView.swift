@@ -25,6 +25,22 @@ struct SettingsView: View {
                         }
                     }
 
+                    NavigationLink {
+                        TriggersView()
+                    } label: {
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Remote Triggers")
+                                Text("Launch watch apps or open links from this phone")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        } icon: {
+                            Image(systemName: "appclip")
+                                .foregroundColor(.orange)
+                        }
+                    }
+
                     Toggle(isOn: $liveCallStatusEnabled) {
                         Label {
                             VStack(alignment: .leading, spacing: 2) {

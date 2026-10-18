@@ -8,10 +8,21 @@ class SettingsStore: ObservableObject {
         static let autoAdvertise = "autoAdvertise"
         static let pairedDevices = "pairedDevices"
         static let liveCallStatus = "liveCallStatus"
+        static let remoteTriggers = "remoteTriggers"
     }
 
     @Published var autoAdvertise: Bool {
         didSet { defaults.set(autoAdvertise, forKey: Keys.autoAdvertise) }
+    }
+
+    /// Remote triggers the iPhone can fire on the watch (protocol §Remote
+    /// triggers). Callers push the list to the watch after edits.
+    @Published var remoteTriggers: [RemoteTrigger] {
+        didSet {
+            if let data = try? JSONEncoder().encode(remoteTriggers) {
+                defaults.set(data, forKey: Keys.remoteTriggers)
+            }
+        }
     }
 
     /// When enabled, uses CallKit to monitor phone call state and pushes
@@ -24,6 +35,12 @@ class SettingsStore: ObservableObject {
     init() {
         self.autoAdvertise = defaults.bool(forKey: Keys.autoAdvertise)
         self.liveCallStatus = defaults.bool(forKey: Keys.liveCallStatus)
+        if let data = defaults.data(forKey: Keys.remoteTriggers),
+           let triggers = try? JSONDecoder().decode([RemoteTrigger].self, from: data) {
+            self.remoteTriggers = triggers
+        } else {
+            self.remoteTriggers = []
+        }
         // Default to false — discoverability only via Add New Watch flow
         if !defaults.contains(key: Keys.autoAdvertise) {
             self.autoAdvertise = false

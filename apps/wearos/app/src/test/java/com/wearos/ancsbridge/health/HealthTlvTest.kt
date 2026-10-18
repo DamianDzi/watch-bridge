@@ -192,6 +192,46 @@ class HealthTlvTest {
         assertEquals(HealthTlv.ControlMessage.Pong, HealthTlv.decodeControl(byteArrayOf(0x05)))
     }
 
+    // ---- Remote trigger control messages ---------------------------------------
+
+    @Test
+    fun triggerListGoldenBytes() {
+        val triggers = listOf(
+            HealthTlv.Trigger(0, HealthTlv.TRIGGER_KIND_PACKAGE, "com.spotify.music"),
+            HealthTlv.Trigger(1, HealthTlv.TRIGGER_KIND_URI, "babydaybook://log/feeding")
+        )
+        val bytes = HealthTlv.triggerList(triggers)
+        val pkg = "com.spotify.music".toByteArray(Charsets.UTF_8)
+        val uri = "babydaybook://log/feeding".toByteArray(Charsets.UTF_8)
+        val expected = byteArrayOf(0x06, 2) +
+            byteArrayOf(0, 0) + le16(pkg.size) + pkg +
+            byteArrayOf(1, 1) + le16(uri.size) + uri
+        assertArrayEquals(expected, bytes)
+        assertEquals(HealthTlv.ControlMessage.TriggerList(triggers), HealthTlv.decodeControl(bytes))
+    }
+
+    @Test
+    fun triggerFireAndResultGoldenBytes() {
+        val fire = HealthTlv.triggerFire(1)
+        assertArrayEquals(byteArrayOf(0x07, 1), fire)
+        assertEquals(HealthTlv.ControlMessage.TriggerFire(1), HealthTlv.decodeControl(fire))
+
+        val result = HealthTlv.triggerResult(1, HealthTlv.TRIGGER_RESULT_BLOCKED_BY_SYSTEM)
+        assertArrayEquals(byteArrayOf(0x08, 1, 3), result)
+        assertEquals(
+            HealthTlv.ControlMessage.TriggerResult(1, HealthTlv.TRIGGER_RESULT_BLOCKED_BY_SYSTEM),
+            HealthTlv.decodeControl(result)
+        )
+    }
+
+    @Test
+    fun rejectsTruncatedTriggerList() {
+        val bytes = HealthTlv.triggerList(listOf(HealthTlv.Trigger(0, HealthTlv.TRIGGER_KIND_PACKAGE, "com.x")))
+        assertThrows(HealthTlv.CodecException::class.java) {
+            HealthTlv.decodeControl(bytes.copyOf(bytes.size - 2))
+        }
+    }
+
     // ---- Malformed input ------------------------------------------------------
 
     @Test

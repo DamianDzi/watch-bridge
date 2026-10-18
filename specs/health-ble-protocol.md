@@ -49,12 +49,21 @@ Workout activity: `0` running · `1` walking · `2` cycling · `3` swimming · `
 ## Control characteristic messages
 
 ```
-HELLO     = 0x01, install_nonce u32, type_bitmap u8, cursor_record_id u64   (watch → iOS)
-ACK       = 0x02, count u8, record_id u64 × count                           (iOS → watch)
-TIME_SYNC = 0x03, epoch_ms u64                                              (iOS → watch; also the B5 read value)
-PING      = 0x04                                                            (watch → iOS)
-PONG      = 0x05                                                            (iOS → watch)
+HELLO         = 0x01, install_nonce u32, type_bitmap u8, cursor_record_id u64   (watch → iOS)
+ACK           = 0x02, count u8, record_id u64 × count                           (iOS → watch)
+TIME_SYNC     = 0x03, epoch_ms u64                                              (iOS → watch; also the B5 read value)
+PING          = 0x04                                                            (watch → iOS)
+PONG          = 0x05                                                            (iOS → watch)
+TRIGGER_LIST  = 0x06, count u8, then per trigger: index u8, kind u8, len u16, payload utf8   (iOS → watch)
+TRIGGER_FIRE  = 0x07, index u8                                                  (iOS → watch)
+TRIGGER_RESULT= 0x08, index u8, result u8                                       (watch → iOS)
 ```
+
+### Remote triggers
+
+`TRIGGER_LIST` replaces the watch's whole stored trigger list (sent after every HELLO and whenever the user edits the list). Trigger kinds: `0` = launch Android package (payload = package name, e.g. `com.spotify.music`), `1` = deep link (payload = URI). **The watch executes only triggers from its stored list — `TRIGGER_FIRE` carries an index, never a raw payload off the wire.** The watch persists the list (SharedPreferences) across reboots. `TRIGGER_LIST` total size must stay ≤ one B5 notification (≤ 509 B; iOS caps the list accordingly).
+
+`TRIGGER_RESULT.result`: `0` launched, `1` no such trigger, `2` launch failed (no activity for package / no handler for URI), `3` blocked by system (background-activity-launch restriction — watch posted a one-tap fallback notification instead).
 
 `install_nonce` = random u32 generated once per watch-app install and persisted (used by iOS to key its dedupe watermark — a watch reinstall resets record IDs to 1 and must not collide with the old watermark).
 

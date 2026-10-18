@@ -61,6 +61,22 @@ object HealthTlv {
     const val CMD_TIME_SYNC = 0x03
     const val CMD_PING = 0x04
     const val CMD_PONG = 0x05
+    const val CMD_TRIGGER_LIST = 0x06
+    const val CMD_TRIGGER_FIRE = 0x07
+    const val CMD_TRIGGER_RESULT = 0x08
+
+    // Remote trigger kinds (TRIGGER_LIST)
+    const val TRIGGER_KIND_PACKAGE = 0
+    const val TRIGGER_KIND_URI = 1
+
+    // TRIGGER_RESULT codes
+    const val TRIGGER_RESULT_OK = 0
+    const val TRIGGER_RESULT_NO_SUCH_TRIGGER = 1
+    const val TRIGGER_RESULT_LAUNCH_FAILED = 2
+    const val TRIGGER_RESULT_BLOCKED_BY_SYSTEM = 3
+
+    /** TRIGGER_LIST must fit one B5 notification; 500 B leaves room for the command framing. */
+    const val MAX_TRIGGER_LIST_BYTES = 500
 
     const val MAX_ACK_IDS = 63
     const val MAX_GPS_POINTS_PER_RECORD = 255
@@ -163,7 +179,13 @@ object HealthTlv {
         data class TimeSync(val epochMs: Long) : ControlMessage()
         object Ping : ControlMessage()
         object Pong : ControlMessage()
+        data class TriggerList(val triggers: List<Trigger>) : ControlMessage()
+        data class TriggerFire(val index: Int) : ControlMessage()
+        data class TriggerResult(val index: Int, val result: Int) : ControlMessage()
     }
+
+    /** One entry of the watch's stored remote-trigger list (see protocol §Remote triggers). */
+    data class Trigger(val index: Int, val kind: Int, val payload: String)
 
     // ---- Encoding ----------------------------------------------------------
 
@@ -279,6 +301,25 @@ object HealthTlv {
 
     fun ping(): ByteArray = byteArrayOf(CMD_PING.toByte())
 
+    fun triggerResult(index: Int, result: Int): ByteArray = byteArrayOf(
+        CMD_TRIGGER_RESULT.toByte(), index.toByte(), result.toByte()
+    )
+
+    /** Watch normally only DECODES these two; encoders exist to pin golden vectors in tests. */
+    fun triggerList(triggers: List<Trigger>): ByteArray {
+        val bodySize = triggers.sumOf { 4 + it.payload.toByteArray(Charsets.UTF_8).size }
+        val out = ByteWriter(2 + bodySize)
+        out.u8(CMD_TRIGGER_LIST)
+        out.u8(triggers.size)
+        triggers.forEach {
+            val payload = it.payload.toByteArray(Charsets.UTF_8)
+            out.u8(it.index); out.u8(it.kind); out.u16(payload.size); out.bytes(payload)
+        }
+        return out.toByteArray()
+    }
+
+    fun triggerFire(index: Int): ByteArray = byteArrayOf(CMD_TRIGGER_FIRE.toByte(), index.toByte())
+
     // ---- Decoding (unit tests + iOS-side mirror) -----------------------------
 
     fun decodeBatch(bytes: ByteArray): List<WireRecord> {
@@ -336,6 +377,19 @@ object HealthTlv {
             CMD_TIME_SYNC -> ControlMessage.TimeSync(r.u64())
             CMD_PING -> ControlMessage.Ping
             CMD_PONG -> ControlMessage.Pong
+            CMD_TRIGGER_LIST -> {
+                val count = r.u8()
+                ControlMessage.TriggerList(
+                    (0 until count).map {
+                        val index = r.u8()
+                        val kind = r.u8()
+                        val len = r.u16()
+                        Trigger(index, kind, String(r.bytes(len), Charsets.UTF_8))
+                    }
+                )
+            }
+            CMD_TRIGGER_FIRE -> ControlMessage.TriggerFire(r.u8())
+            CMD_TRIGGER_RESULT -> ControlMessage.TriggerResult(r.u8(), r.u8())
             else -> throw CodecException("unknown control command $cmd")
         }.also { if (r.remaining() != 0) throw CodecException("trailing bytes in control message") }
     }

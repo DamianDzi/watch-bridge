@@ -66,11 +66,14 @@ struct HealthRecord {
 // MARK: - Control messages (health-control characteristic, B5)
 
 enum HealthControlCommand: UInt8 {
-    case hello = 1       // watch → iOS: handshake
-    case ack = 2         // iOS → watch: record ids confirmed saved
-    case timeSync = 3    // iOS → watch: epoch ms
-    case ping = 4        // watch → iOS
-    case pong = 5        // iOS → watch
+    case hello = 1            // watch → iOS: handshake
+    case ack = 2              // iOS → watch: record ids confirmed saved
+    case timeSync = 3         // iOS → watch: epoch ms
+    case ping = 4             // watch → iOS
+    case pong = 5             // iOS → watch
+    case triggerList = 6      // iOS → watch: full trigger list
+    case triggerFire = 7      // iOS → watch: execute stored trigger by index
+    case triggerResult = 8    // watch → iOS: execution outcome
 }
 
 enum HealthControlMessage {
@@ -79,6 +82,26 @@ enum HealthControlMessage {
     case timeSync(epochMs: Int64)
     case ping
     case pong
+    case triggerList(triggers: [RemoteTrigger])
+    case triggerFire(index: UInt8)
+    case triggerResult(index: UInt8, result: UInt8)
+}
+
+/// One stored remote trigger (protocol §Remote triggers). `index` is the
+/// watch-side execution handle; payloads are only ever sent in TRIGGER_LIST,
+/// never with TRIGGER_FIRE.
+struct RemoteTrigger: Equatable, Codable {
+    let index: UInt8
+    /// 0 = launch Android package, 1 = deep link URI (see HealthControlCodec docs)
+    let kind: UInt8
+    let payload: String
+}
+
+enum RemoteTriggerResult: UInt8 {
+    case ok = 0
+    case noSuchTrigger = 1
+    case launchFailed = 2
+    case blockedBySystem = 3
 }
 
 // MARK: - Errors
@@ -139,6 +162,13 @@ private struct ByteReader {
     mutating func readF32() throws -> Float32 {
         try Float32(bitPattern: readU32())
     }
+
+    mutating func readBytes(_ count: Int) throws -> Data {
+        guard remaining >= count else { throw HealthTLVError.truncatedHeader(at: offset) }
+        let start = data.startIndex + offset
+        defer { offset += count }
+        return data.subdata(in: start..<(start + count))
+    }
 }
 
 private struct ByteWriter {
@@ -162,6 +192,12 @@ private struct ByteWriter {
     mutating func writeI32(_ v: Int32) { writeU32(UInt32(bitPattern: v)) }
 
     mutating func writeF32(_ v: Float32) { writeU32(v.bitPattern) }
+
+    mutating func writeUTF8(_ s: String) {
+        let bytes = Array(s.utf8)
+        writeU16(UInt16(bytes.count))
+        data.append(contentsOf: bytes)
+    }
 }
 
 // MARK: - Batch decoding
@@ -289,6 +325,21 @@ enum HealthControlCodec {
             w.writeU8(HealthControlCommand.ping.rawValue)
         case .pong:
             w.writeU8(HealthControlCommand.pong.rawValue)
+        case .triggerList(let triggers):
+            w.writeU8(HealthControlCommand.triggerList.rawValue)
+            w.writeU8(UInt8(triggers.count))
+            for trigger in triggers {
+                w.writeU8(trigger.index)
+                w.writeU8(trigger.kind)
+                w.writeUTF8(trigger.payload)
+            }
+        case .triggerFire(let index):
+            w.writeU8(HealthControlCommand.triggerFire.rawValue)
+            w.writeU8(index)
+        case .triggerResult(let index, let result):
+            w.writeU8(HealthControlCommand.triggerResult.rawValue)
+            w.writeU8(index)
+            w.writeU8(result)
         }
         return w.data
     }
@@ -315,6 +366,24 @@ enum HealthControlCodec {
             return .ping
         case .pong:
             return .pong
+        case .triggerList:
+            let count = try r.readU8()
+            var triggers: [RemoteTrigger] = []
+            for _ in 0..<count {
+                let index = try r.readU8()
+                let kind = try r.readU8()
+                let len = Int(try r.readU16())
+                guard let payload = String(data: try r.readBytes(len), encoding: .utf8) else {
+                    throw HealthTLVError.badControlMessage
+                }
+                triggers.append(RemoteTrigger(index: index, kind: kind, payload: payload))
+            }
+            return .triggerList(triggers: triggers)
+        case .triggerFire:
+            return .triggerFire(index: try r.readU8())
+        case .triggerResult:
+            return .triggerResult(index: try r.readU8(), result: try r.readU8())
         }
+        if r.remaining != 0 { throw HealthTLVError.badControlMessage }
     }
 }

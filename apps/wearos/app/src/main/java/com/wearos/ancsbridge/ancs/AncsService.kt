@@ -19,6 +19,7 @@ import com.wearos.ancsbridge.ble.BleScanner
 import com.wearos.ancsbridge.ble.BondStateReceiver
 import com.wearos.ancsbridge.health.HealthConnectReader
 import com.wearos.ancsbridge.health.HealthDao
+import com.wearos.ancsbridge.health.RemoteTriggerManager
 import com.wearos.ancsbridge.health.HealthDatabase
 import com.wearos.ancsbridge.health.HealthServicesCollector
 import com.wearos.ancsbridge.health.HealthSyncManager
@@ -81,6 +82,7 @@ class AncsService : Service() {
     private lateinit var healthSyncManager: HealthSyncManager
     private lateinit var healthCollector: HealthServicesCollector
     private lateinit var healthConnectReader: HealthConnectReader
+    private lateinit var remoteTriggerManager: RemoteTriggerManager
 
     private val dataSourceAssembler = DataSourceAssembler()
     private val appNameCache = mutableMapOf<String, String>()
@@ -157,6 +159,10 @@ class AncsService : Service() {
             healthSyncManager.onRecordsAvailable()
         }
         healthConnectReader.start()
+
+        // Remote triggers: iPhone pushes the trigger list, watch executes by index (protocol §Remote triggers)
+        remoteTriggerManager = RemoteTriggerManager(this, connectionManager, scope)
+        remoteTriggerManager.start()
 
         // Update service notification and shared state based on connection state
         scope.launch {

@@ -80,6 +80,10 @@ class PeripheralManager: NSObject, ObservableObject {
         }
         // Wire up health bridge acks/time-sync through this manager's B5 characteristic
         healthSyncManager.channel = self
+        // Remote triggers live in SettingsStore; pushed after HELLO and on edits
+        healthSyncManager.triggersProvider = { [weak self] in
+            self?.settingsStore.remoteTriggers ?? []
+        }
         // Start/stop based on setting
         updateCallStateObserving()
     }

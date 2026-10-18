@@ -31,9 +31,20 @@ class HealthSyncManager(
         private const val MAX_UNACKED_BATCHES = 3
         private const val PREFS = "health_bridge"
         private const val KEY_INSTALL_NONCE = "install_nonce"
+
+        // A5 debounce: a record arriving alone waits at most 30 s; a burst
+        // flushes at 20. Once pumping, ACKs keep the loop draining without
+        // these counters.
+        private const val PUMP_RECORD_THRESHOLD = 20
+        private const val PUMP_MAX_DELAY_MS = 30_000L
     }
 
     private var linkReady = false
+
+    // A5 debounce state: record-collector signals since the last pump trigger,
+    // and when the first still-unpumped record landed.
+    private var pendingSignals = 0
+    private var firstPendingSignalAt = 0L
 
     // record ids per written-but-unacked batch; drained by ACKs
     private val pendingBatches = mutableListOf<MutableSet<Long>>()
@@ -69,9 +80,18 @@ class HealthSyncManager(
         }
     }
 
-    /** Called by collectors whenever new records land in Room. */
+    /** Called by collectors whenever new records land in Room (debounced — see A5). */
     fun onRecordsAvailable() {
-        scope.launch { pumpIfNeeded() }
+        scope.launch {
+            val now = System.currentTimeMillis()
+            if (firstPendingSignalAt == 0L) firstPendingSignalAt = now
+            pendingSignals++
+            if (pendingSignals >= PUMP_RECORD_THRESHOLD || now - firstPendingSignalAt >= PUMP_MAX_DELAY_MS) {
+                pendingSignals = 0
+                firstPendingSignalAt = 0L
+                pumpIfNeeded()
+            }
+        }
     }
 
     private suspend fun onLinkReady() {
@@ -119,6 +139,8 @@ class HealthSyncManager(
         if (!linkReady) return
         linkReady = false
         pendingBatches.clear()
+        pendingSignals = 0
+        firstPendingSignalAt = 0L
         Log.i(TAG, "Health link lost — sent flags clear on next link ready")
     }
 

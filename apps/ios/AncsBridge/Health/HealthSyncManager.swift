@@ -28,6 +28,10 @@ final class HealthSyncManager: ObservableObject {
 
     weak var channel: HealthControlChannel?
 
+    /// Supplies the current remote-trigger list (owned by SettingsStore);
+    /// pushed to the watch after every HELLO and on edits.
+    var triggersProvider: (() -> [RemoteTrigger])?
+
     @Published private(set) var isHealthKitAuthorized = false
     @Published private(set) var lastSync: Date?
     @Published private(set) var recordsWritten = 0
@@ -35,6 +39,13 @@ final class HealthSyncManager: ObservableObject {
     @Published private(set) var pendingWorkout = false
     @Published private(set) var lastBatteryPercent: UInt8?
     @Published private(set) var lastError: String?
+    @Published private(set) var lastTriggerOutcome: TriggerOutcome?
+
+    struct TriggerOutcome: Equatable {
+        let index: UInt8
+        let result: UInt8
+        let at: Date
+    }
 
     private var installNonce: UInt32?
 
@@ -81,15 +92,42 @@ final class HealthSyncManager: ObservableObject {
                 installNonce = nonce
                 logger.info("Health HELLO: install nonce \(nonce)")
                 _ = channel?.sendHealthControl(HealthControlCodec.encode(.timeSync(epochMs: currentEpochMs())))
+                pushTriggerList()
             case .ping:
                 logger.debug("Health PING")
                 _ = channel?.sendHealthControl(HealthControlCodec.encode(.pong))
+            case .triggerResult(let index, let result):
+                logger.info("Trigger result: index \(index) result \(result)")
+                DispatchQueue.main.async {
+                    self.lastTriggerOutcome = TriggerOutcome(index: index, result: result, at: Date())
+                }
             case .ack, .timeSync, .pong:
                 logger.warning("Unexpected control message from watch (iOS-only command)")
+            case .triggerList, .triggerFire:
+                logger.warning("Unexpected control message from watch (watch-only command)")
             }
         } catch {
             reportError("Bad control message: \(error)")
         }
+    }
+
+    // MARK: - Remote triggers
+
+    /// Sends the current trigger list to the watch (full replacement).
+    func pushTriggerList() {
+        let triggers = triggersProvider?() ?? []
+        guard !triggers.isEmpty else { return }
+        let encoded = HealthControlCodec.encode(.triggerList(triggers: triggers))
+        guard encoded.count <= 500 else {
+            reportError("Trigger list too large (\(encoded.count) B > 500) — remove some triggers")
+            return
+        }
+        _ = channel?.sendHealthControl(encoded)
+    }
+
+    /// Fires a stored trigger on the watch; feedback arrives via lastTriggerOutcome.
+    func fireTrigger(_ index: UInt8) {
+        _ = channel?.sendHealthControl(HealthControlCodec.encode(.triggerFire(index: index)))
     }
 
     // MARK: - Data characteristic (B6) writes from the watch

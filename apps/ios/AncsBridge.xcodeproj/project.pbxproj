@@ -24,6 +24,7 @@
 		B95E39797258FB0B69F70575 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE26FD7165900DB79D1EAA05 /* ContentView.swift */; };
 		BADFA7CC5AEE06DFBD06B68F /* QuickReplySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C4E6DA939E59F8521934572 /* QuickReplySettingsView.swift */; };
 		BAF4F26B9E9AC17651F796F1 /* ConnectionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD247F6A8BEECDA55C238CC2 /* ConnectionState.swift */; };
+		BC4389408FE9D906CAF6FD1F /* TriggersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B91955A82AADE3A9B904BE5 /* TriggersView.swift */; };
 		C64BBEB053EDA70670D3A4F7 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE23C48EE7171805E83E7C74 /* SettingsView.swift */; };
 		D1F48C50EA6CBDBC807C840E /* HealthSyncManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CDE9D700281B6E0D5267605 /* HealthSyncManager.swift */; };
 		DD9340FAB07FAED55ED3B215 /* HealthTLV.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B97157A77222F4E5E4CA300 /* HealthTLV.swift */; };
@@ -53,11 +54,12 @@
 		44ABF7EEC7E05D1F959C7838 /* HealthKitWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthKitWriter.swift; sourceTree = "<group>"; };
 		4CD7E830A5834A54112C3678 /* PeripheralManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeripheralManager.swift; sourceTree = "<group>"; };
 		523A43621478CD12C73CC964 /* Info-Generated.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "Info-Generated.plist"; sourceTree = "<group>"; };
-		5D80699CA7470D90625E8874 /* AncsBridge.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AncsBridge.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5D80699CA7470D90625E8874 /* AncsBridge.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = AncsBridge.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5DAFE504FCCF42292D6F4FE8 /* AncsBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AncsBridgeTests.swift; sourceTree = "<group>"; };
 		6B64A6B42E55DCF830BD9501 /* BLEViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BLEViewModel.swift; sourceTree = "<group>"; };
 		72C8FAE0AB0196096C3D7552 /* QuickReplyStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickReplyStore.swift; sourceTree = "<group>"; };
 		77C36C2AFA8EA8C56AF8471D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		7B91955A82AADE3A9B904BE5 /* TriggersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TriggersView.swift; sourceTree = "<group>"; };
 		8B0BF9F2B6715DF8C2DDD8B8 /* AddWatchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddWatchView.swift; sourceTree = "<group>"; };
 		926709A8DA80CA9A3D795E25 /* HealthSyncCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthSyncCard.swift; sourceTree = "<group>"; };
 		BE23C48EE7171805E83E7C74 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -109,6 +111,7 @@
 				0C4E6DA939E59F8521934572 /* QuickReplySettingsView.swift */,
 				BE23C48EE7171805E83E7C74 /* SettingsView.swift */,
 				076673E488AFB468ED2E2EF9 /* StatusView.swift */,
+				7B91955A82AADE3A9B904BE5 /* TriggersView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -287,6 +290,7 @@
 				B6CCF526A866F740469E261D /* SettingsStore.swift in Sources */,
 				C64BBEB053EDA70670D3A4F7 /* SettingsView.swift in Sources */,
 				246322911A02C982C0331924 /* StatusView.swift in Sources */,
+				BC4389408FE9D906CAF6FD1F /* TriggersView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -470,7 +474,6 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = RH3T97HUHU;
 				INFOPLIST_FILE = "AncsBridge/Info-Generated.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -493,7 +496,6 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = RH3T97HUHU;
 				INFOPLIST_FILE = "AncsBridge/Info-Generated.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
