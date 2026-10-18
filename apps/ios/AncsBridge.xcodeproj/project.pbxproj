@@ -53,7 +53,7 @@
 		44ABF7EEC7E05D1F959C7838 /* HealthKitWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthKitWriter.swift; sourceTree = "<group>"; };
 		4CD7E830A5834A54112C3678 /* PeripheralManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeripheralManager.swift; sourceTree = "<group>"; };
 		523A43621478CD12C73CC964 /* Info-Generated.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "Info-Generated.plist"; sourceTree = "<group>"; };
-		5D80699CA7470D90625E8874 /* AncsBridge.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = AncsBridge.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5D80699CA7470D90625E8874 /* AncsBridge.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AncsBridge.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5DAFE504FCCF42292D6F4FE8 /* AncsBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AncsBridgeTests.swift; sourceTree = "<group>"; };
 		6B64A6B42E55DCF830BD9501 /* BLEViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BLEViewModel.swift; sourceTree = "<group>"; };
 		72C8FAE0AB0196096C3D7552 /* QuickReplyStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickReplyStore.swift; sourceTree = "<group>"; };
@@ -470,6 +470,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = RH3T97HUHU;
 				INFOPLIST_FILE = "AncsBridge/Info-Generated.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -492,6 +493,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = RH3T97HUHU;
 				INFOPLIST_FILE = "AncsBridge/Info-Generated.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
