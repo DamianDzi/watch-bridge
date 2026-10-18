@@ -6,7 +6,10 @@ import android.content.Intent
 import android.util.Log
 
 /**
- * Restarts AncsService after device boot if a bonded iPhone exists.
+ * Restarts AncsService after device boot if a bonded iPhone exists, and
+ * after the app is updated (Android does not restart sticky services on
+ * package replace — without this the watch side sat dead after every
+ * `adb install -r`).
  */
 class BootReceiver : BroadcastReceiver() {
 
@@ -15,8 +18,10 @@ class BootReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
-            Log.i(TAG, "Boot completed, starting AncsService")
+        val isBoot = intent.action == Intent.ACTION_BOOT_COMPLETED
+        val isSelfReplaced = intent.action == Intent.ACTION_MY_PACKAGE_REPLACED
+        if (isBoot || isSelfReplaced) {
+            Log.i(TAG, "Starting AncsService (${intent.action})")
             val serviceIntent = Intent(context, AncsService::class.java).apply {
                 action = AncsService.ACTION_RECONNECT
             }

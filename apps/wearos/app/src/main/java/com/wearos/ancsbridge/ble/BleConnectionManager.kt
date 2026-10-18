@@ -214,6 +214,10 @@ class BleConnectionManager(private val context: Context) {
             isWritingDescriptor = false
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 Log.e(TAG, "Descriptor write failed: $status for ${descriptor.characteristic.uuid}")
+                // A failed CCCD write must not stall the queue — later
+                // subscriptions (e.g. health control after a transient
+                // call-state failure) would never be issued.
+                processDescriptorWriteQueue()
                 return@GattCallback
             }
 
