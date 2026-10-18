@@ -53,3 +53,18 @@ In Xcode: add your Apple ID (Settings → Accounts), select your personal team f
 ## Verification checklist (AC1–AC7)
 
 See `specs/spec.md` §Acceptance criteria — run each after first successful pairing, before calling phase 3 done.
+
+## Troubleshooting: after reinstalling either app via CLI
+
+Replacing an app (adb install -r / devicectl) can leave stale bond-keyed GATT
+state: the watch's subscribes fail with "write not permitted" (status 3) or
+"invalid handle" (status 1) on the companion service while ANCS still works.
+A Bluetooth toggle does NOT clear it — the state is keyed to the pairing.
+Remedy (takes a minute): forget the pairing on BOTH devices (iPhone:
+Settings → Bluetooth → (ⓘ) → Forget; watch: Settings → Connections →
+Bluetooth → unpair), then reopen both apps and accept the pairing prompt.
+The watch's buffered health records backfill to Apple Health on reconnect.
+
+Also: the watch app auto-restarts after `adb install -r` via
+MY_PACKAGE_REPLACED (BootReceiver) — Android does not restart sticky
+services on package replace by itself.
