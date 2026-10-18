@@ -636,14 +636,29 @@ class BleConnectionManager(private val context: Context) {
     }
 
     /**
-     * Forces a GATT disconnect on a zombie link. Keeps autoReconnect and the
-     * target device so the normal onDisconnected → scheduleReconnect path
-     * restores the link (and iOS state-restores the app when we reconnect).
+     * Zombie-link recovery: a silently dead GATT link never delivers
+     * onDisconnected, so a plain disconnect() goes nowhere (observed on
+     * hardware — the app believed it was connected forever). Do everything
+     * onDisconnected would have done, plus a hard close, then reconnect.
+     * Keeps autoReconnect and the target device; iOS state-restores its app
+     * when we connect again.
      */
     fun forceLinkReset() {
-        val g = gatt ?: return
-        Log.w(TAG, "Forcing GATT disconnect to reset the link")
-        g.disconnect()
+        val g = gatt
+        Log.w(TAG, "Watchdog zombie-link reset: hard teardown + reconnect")
+        try { g?.disconnect() } catch (e: Exception) {
+            Log.w(TAG, "disconnect() during reset: ${e.message}")
+        }
+        try { g?.close() } catch (e: Exception) {
+            Log.w(TAG, "close() during reset: ${e.message}")
+        }
+        gatt = null
+        clearCharacteristics()
+        _connectionState.value = ConnectionState.Disconnected()
+        scope.launch { failAllQueuedWrites("watchdog reset") }
+        if (autoReconnect && targetDevice != null) {
+            scheduleReconnect()
+        }
     }
 
     /**
