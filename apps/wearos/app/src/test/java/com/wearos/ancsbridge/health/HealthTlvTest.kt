@@ -235,8 +235,8 @@ class HealthTlvTest {
     @Test
     fun appListSingleChunkGoldenBytes() {
         val apps = listOf(
-            HealthTlv.AppInfo("com.spotify.music", "Spotify"),
-            HealthTlv.AppInfo("com.drillyapps.babydaybook", "Baby Daybook")
+            HealthTlv.AppInfo("com.spotify.music", "Spotify", standalone = true),
+            HealthTlv.AppInfo("com.drillyapps.babydaybook", "Baby Daybook", standalone = false)
         )
         val chunks = HealthTlv.appListChunks(apps, maxBytes = 480)
         assertEquals(1, chunks.size)
@@ -245,8 +245,8 @@ class HealthTlvTest {
         val bdb = "com.drillyapps.babydaybook".toByteArray(Charsets.UTF_8)
         val bdbLabel = "Baby Daybook".toByteArray(Charsets.UTF_8)
         val expected = byteArrayOf(0x0A, 0, 1) +
-            le16(spotify.size) + spotify + le16(spotifyLabel.size) + spotifyLabel +
-            le16(bdb.size) + bdb + le16(bdbLabel.size) + bdbLabel
+            le16(spotify.size) + spotify + le16(spotifyLabel.size) + spotifyLabel + byteArrayOf(1) +
+            le16(bdb.size) + bdb + le16(bdbLabel.size) + bdbLabel + byteArrayOf(0)
         assertArrayEquals(expected, chunks[0])
         assertEquals(
             HealthTlv.ControlMessage.AppList(0, true, apps),
@@ -256,8 +256,8 @@ class HealthTlvTest {
 
     @Test
     fun appListMultiChunkReassembly() {
-        val apps = (1..6).map { HealthTlv.AppInfo("com.app$it", "App $it") }
-        // Force one entry per chunk: each entry is ~4+10+6=20 B, cap 25 fits only one.
+        val apps = (1..6).map { HealthTlv.AppInfo("com.app$it", "App $it", standalone = it % 2 == 0) }
+        // Force one entry per chunk: each entry is ~4+10+6+1=21 B, cap 25 fits only one.
         val chunks = HealthTlv.appListChunks(apps, maxBytes = 25)
         assertEquals(apps.size, chunks.size)
         val decoded = chunks.map { HealthTlv.decodeControl(it) as HealthTlv.ControlMessage.AppList }
@@ -268,6 +268,8 @@ class HealthTlvTest {
         assertEquals(true, decoded.last().isFinal)
         assertEquals(apps.last(), decoded.last().entries.single())
         assertEquals(apps.size - 1, decoded.last().chunkIndex)
+        // Standalone flag survives the round trip
+        assertEquals(apps.map { it.standalone }, decoded.flatMap { it.entries }.map { it.standalone })
         // Reassembled in order = original list
         assertEquals(apps, decoded.flatMap { it.entries })
         // Empty list → one empty final chunk
@@ -278,11 +280,18 @@ class HealthTlvTest {
 
     @Test
     fun rejectsTruncatedAppListEntry() {
-        val apps = listOf(HealthTlv.AppInfo("com.spotify.music", "Spotify"))
+        val apps = listOf(HealthTlv.AppInfo("com.spotify.music", "Spotify", standalone = true))
         val bytes = HealthTlv.appListChunks(apps).single()
         // Cut inside the label bytes → entry truncated mid-payload
         assertThrows(HealthTlv.CodecException::class.java) {
             HealthTlv.decodeControl(bytes.copyOf(bytes.size - 3))
+        }
+        // The standalone byte is REQUIRED: an old-format entry (no trailing byte) is malformed
+        val pkg = "com.spotify.music".toByteArray(Charsets.UTF_8)
+        val label = "Spotify".toByteArray(Charsets.UTF_8)
+        val oldFormat = byteArrayOf(0x0A, 0, 1) + le16(pkg.size) + pkg + le16(label.size) + label
+        assertThrows(HealthTlv.CodecException::class.java) {
+            HealthTlv.decodeControl(oldFormat)
         }
         // APP_LIST_REQ must have an empty body
         assertThrows(HealthTlv.CodecException::class.java) {

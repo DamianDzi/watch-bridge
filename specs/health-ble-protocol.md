@@ -69,7 +69,7 @@ APP_LIST      = 0x0A, chunk_index u8, is_final u8, then entries until the chunk'
 
 ### Watch app list (picker source)
 
-`APP_LIST_REQ` (empty body) makes the watch reply with its launchable apps as one or more `APP_LIST` writes on …B5. Entry = `[u16 pkg_len][utf8 package][u16 label_len][utf8 label]`; watch sends apps with a MAIN/LAUNCHER intent (excluding itself), label falling back to the package name, sorted by label case-insensitively. A full list usually exceeds one write, so it is **paged**: each write = `[u8 0x0A][u8 chunk_index][u8 is_final]` + as many entries as fit in ≤ 480 B total. chunk_index starts at 0 and increments; the final chunk has `is_final = 1`. The watch enqueues all chunks in order through its serialized write queue so chunks can't reorder.
+`APP_LIST_REQ` (empty body) makes the watch reply with its launchable apps as one or more `APP_LIST` writes on …B5. Entry = `[u16 pkg_len][utf8 package][u16 label_len][utf8 label][u8 standalone]` — `standalone` = 1 when the app's manifest declares meta-data `com.google.android.wearable.standalone` = true (works without any phone; 0 otherwise). Both codecs treat the byte as REQUIRED: an entry without it is malformed. Watch sends apps with a MAIN/LAUNCHER intent (excluding itself), label falling back to the package name, sorted by label case-insensitively. A full list usually exceeds one write, so it is **paged**: each write = `[u8 0x0A][u8 chunk_index][u8 is_final]` + as many entries as fit in ≤ 480 B total. chunk_index starts at 0 and increments; the final chunk has `is_final = 1`. The watch enqueues all chunks in order through its serialized write queue so chunks can't reorder.
 
 iOS reassembles: chunk 0 starts a fresh assembly; a chunk whose index ≠ expected+1 resets the partial list (the UI offers a retry); `is_final` flushes the assembled list; a ~5 s timeout aborts a stalled fetch. An empty final chunk is valid (watch has no other launchable apps).
 
@@ -78,6 +78,14 @@ iOS reassembles: chunk 0 starts a fresh assembly; a chunk whose index ≠ expect
 `type_bitmap` bits 0–7 = record types 1–8 the watch intends to send (informational).
 
 `cursor_record_id` = the watch's oldest unsent record ID (informational for iOS).
+
+## Link watchdog
+
+A GATT link can die silently (no disconnect callback — observed on hardware).
+While …B5 is subscribed, the watch sends PING every 60 s. Two consecutive
+unanswered PINGs (~120–180 s of silence) ⇒ the watch treats the link as a
+zombie and forces a GATT disconnect; the normal reconnect machinery then takes
+over (iOS state restoration relaunches the app when the central reconnects).
 
 ## Sync semantics
 

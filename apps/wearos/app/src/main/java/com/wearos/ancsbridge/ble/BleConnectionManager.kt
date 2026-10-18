@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.LinkedList
 import java.util.UUID
@@ -40,6 +41,17 @@ class BleConnectionManager(private val context: Context) {
         private const val MAX_SERVICE_DISCOVERY_RETRIES = 2
         private const val MAX_WRITE_ATTEMPTS = 5
         private const val WRITE_RETRY_DELAY_MS = 150L
+
+        // Link watchdog (protocol §Link watchdog): PING every 60 s while the
+        // B5 subscription is active; two consecutive unanswered PINGs = zombie
+        // link → force disconnect so the reconnect machinery takes over.
+        private const val PING_INTERVAL_MS = 60_000L
+        private const val MAX_MISSED_PONGS = 2
+
+        // Control command bytes on B5 (mirrors HealthTlv.CMD_*; local copies
+        // keep the BLE layer decoupled from the health codec).
+        private const val CMD_PING_BYTE = 0x04
+        private const val CMD_PONG_BYTE = 0x05
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -90,6 +102,12 @@ class BleConnectionManager(private val context: Context) {
     private val characteristicWriteQueue = LinkedList<QueuedWrite>()
     private var currentWrite: QueuedWrite? = null
     private var isSubscribedToHealthControl = false
+
+    // Link watchdog state (see companion docs). pongSinceLastPing is set from
+    // the GATT Binder thread — volatile boolean write/read only.
+    private var watchdogJob: Job? = null
+    @Volatile private var pongSinceLastPing = false
+    private var missedPongs = 0
 
     private var serviceDiscoveryRetries = 0
     private var notificationSourceChar: BluetoothGattCharacteristic? = null
@@ -226,6 +244,7 @@ class BleConnectionManager(private val context: Context) {
                 AncsConstants.HEALTH_CONTROL_CHARACTERISTIC_UUID -> {
                     Log.i(TAG, "Subscribed to health control — health sync can start")
                     isSubscribedToHealthControl = true
+                    startLinkWatchdog()
                     _healthControlReady.tryEmit(Unit)
                 }
                 AncsConstants.DATA_SOURCE_UUID -> {
@@ -274,6 +293,7 @@ class BleConnectionManager(private val context: Context) {
             _callStateEvents.tryEmit(data)
         },
         onHealthControlChanged = { data ->
+            if (data.isNotEmpty() && data[0].toInt() == CMD_PONG_BYTE) pongSinceLastPing = true
             _healthControlEvents.tryEmit(data)
         }
     )
@@ -459,6 +479,7 @@ class BleConnectionManager(private val context: Context) {
      */
     fun subscribeToHealthControl() {
         if (isSubscribedToHealthControl) {
+            startLinkWatchdog()
             _healthControlReady.tryEmit(Unit)
             return
         }
@@ -583,6 +604,49 @@ class BleConnectionManager(private val context: Context) {
     }
 
     /**
+     * Link watchdog (protocol §Link watchdog). Runs while the …B5 subscription
+     * is active: sends PING every 60 s; after two consecutive unanswered PINGs
+     * the link is treated as a zombie (silently dead — no disconnect callback,
+     * observed on hardware) and force-reset so the reconnect machinery takes
+     * over. Restarting is idempotent (each B5 subscription re-arms it).
+     */
+    private fun startLinkWatchdog() {
+        scope.launch {
+            watchdogJob?.cancel()
+            pongSinceLastPing = true // grace: a PONG from the HELLO-time PING counts
+            missedPongs = 0
+            watchdogJob = launch {
+                while (isActive) {
+                    delay(PING_INTERVAL_MS)
+                    if (_connectionState.value !is ConnectionState.Connected) break
+                    if (pongSinceLastPing) missedPongs = 0 else missedPongs++
+                    pongSinceLastPing = false
+                    if (missedPongs >= MAX_MISSED_PONGS) {
+                        Log.w(TAG, "Link watchdog: no PONG after $missedPongs pings — forcing reconnect")
+                        forceLinkReset()
+                        break
+                    }
+                    enqueueWrite(
+                        AncsConstants.HEALTH_CONTROL_CHARACTERISTIC_UUID,
+                        byteArrayOf(CMD_PING_BYTE.toByte())
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Forces a GATT disconnect on a zombie link. Keeps autoReconnect and the
+     * target device so the normal onDisconnected → scheduleReconnect path
+     * restores the link (and iOS state-restores the app when we reconnect).
+     */
+    fun forceLinkReset() {
+        val g = gatt ?: return
+        Log.w(TAG, "Forcing GATT disconnect to reset the link")
+        g.disconnect()
+    }
+
+    /**
      * Get the bonded iPhone device if one exists.
      */
     fun getBondedIPhone(): BluetoothDevice? {
@@ -644,11 +708,15 @@ class BleConnectionManager(private val context: Context) {
         isSubscribedToHealthControl = false
         descriptorWriteQueue.clear()
         isWritingDescriptor = false
+        watchdogJob?.cancel()
+        watchdogJob = null
     }
 
     fun destroy() {
         autoReconnect = false
         reconnectJob?.cancel()
+        watchdogJob?.cancel()
+        watchdogJob = null
         gatt?.disconnect()
         gatt?.close()
         gatt = null

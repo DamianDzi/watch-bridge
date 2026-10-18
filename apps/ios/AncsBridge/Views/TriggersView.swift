@@ -211,6 +211,11 @@ private struct AddTriggerView: View {
                                     Text(app.packageName)
                                         .font(.caption)
                                         .foregroundColor(.secondary)
+                                    if app.standalone {
+                                        Label("Works without phone", systemImage: "checkmark.seal")
+                                            .font(.caption2)
+                                            .foregroundColor(.green)
+                                    }
                                 }
                                 Spacer()
                                 if payload == app.packageName {
@@ -248,6 +253,10 @@ private struct AddTriggerView: View {
         } footer: {
             if !isWatchConnected {
                 Text("Watch not connected — refresh needs the bridge link up.")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+            } else if !sortedApps.isEmpty {
+                Text("Apps marked “Works without phone” run on the watch alone. Others need their own Android phone app connected — e.g. Baby Daybook needs its Android app; Spotify works alone.")
                     .font(.footnote)
                     .foregroundColor(.secondary)
             }

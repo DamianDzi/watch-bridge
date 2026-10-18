@@ -325,8 +325,8 @@ final class HealthTLVTests: XCTestCase {
 
     func testAppListSingleChunkGoldenBytes() throws {
         let apps = [
-            RemoteAppInfo(packageName: "com.spotify.music", label: "Spotify"),
-            RemoteAppInfo(packageName: "com.drillyapps.babydaybook", label: "Baby Daybook")
+            RemoteAppInfo(packageName: "com.spotify.music", label: "Spotify", standalone: true),
+            RemoteAppInfo(packageName: "com.drillyapps.babydaybook", label: "Baby Daybook", standalone: false)
         ]
         let encoded = HealthControlCodec.encode(.appList(chunkIndex: 0, isFinal: true, entries: apps))
 
@@ -338,10 +338,12 @@ final class HealthTLVTests: XCTestCase {
         expected.u16(UInt16(pkg.count)); expected.data.append(contentsOf: pkg)
         let label = Array("Spotify".utf8)
         expected.u16(UInt16(label.count)); expected.data.append(contentsOf: label)
+        expected.u8(1) // standalone
         let bdb = Array("com.drillyapps.babydaybook".utf8)
         expected.u16(UInt16(bdb.count)); expected.data.append(contentsOf: bdb)
         let bdbLabel = Array("Baby Daybook".utf8)
         expected.u16(UInt16(bdbLabel.count)); expected.data.append(contentsOf: bdbLabel)
+        expected.u8(0) // not standalone
         XCTAssertEqual(encoded, expected.data)
 
         guard case .appList(let chunkIndex, let isFinal, let decoded) = try HealthControlCodec.decode(encoded) else {
@@ -350,6 +352,8 @@ final class HealthTLVTests: XCTestCase {
         XCTAssertEqual(chunkIndex, 0)
         XCTAssertTrue(isFinal)
         XCTAssertEqual(decoded, apps)
+        XCTAssertTrue(decoded[0].standalone)
+        XCTAssertFalse(decoded[1].standalone)
     }
 
     func testAppListAssemblerReassemblyAndReset() {
@@ -378,10 +382,21 @@ final class HealthTLVTests: XCTestCase {
         // Truncated entry: cut inside the label bytes
         let encoded = HealthControlCodec.encode(
             .appList(chunkIndex: 0, isFinal: true,
-                     entries: [RemoteAppInfo(packageName: "com.spotify.music", label: "Spotify")])
+                     entries: [RemoteAppInfo(packageName: "com.spotify.music", label: "Spotify", standalone: true)])
         )
         let truncated = encoded.prefix(encoded.count - 3)
         XCTAssertThrowsError(try HealthControlCodec.decode(truncated))
+
+        // The standalone byte is REQUIRED: an old-format entry (no trailing byte) is malformed
+        var oldFormat = TestWriter()
+        oldFormat.u8(0x0A)
+        oldFormat.u8(0)
+        oldFormat.u8(1)
+        let pkg = Array("com.spotify.music".utf8)
+        oldFormat.u16(UInt16(pkg.count)); oldFormat.data.append(contentsOf: pkg)
+        let label = Array("Spotify".utf8)
+        oldFormat.u16(UInt16(label.count)); oldFormat.data.append(contentsOf: label)
+        XCTAssertThrowsError(try HealthControlCodec.decode(oldFormat.data))
 
         // APP_LIST_REQ must have an empty body
         let req = HealthControlCodec.encode(.appListReq)

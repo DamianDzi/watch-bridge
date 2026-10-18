@@ -36,6 +36,7 @@ class RemoteTriggerManager(
         private const val PREFS = "health_bridge"
         private const val KEY_TRIGGERS = "remote_triggers"
         private const val FALLBACK_NOTIFICATION_ID = 9100
+        private const val STANDALONE_METADATA_KEY = "com.google.android.wearable.standalone"
     }
 
     private val triggers = mutableListOf<HealthTlv.Trigger>()
@@ -74,6 +75,10 @@ class RemoteTriggerManager(
      * APP_LIST_REQ: report the watch's launchable apps back as ordered
      * APP_LIST chunks (protocol §Watch app list). Query + encode on IO; the
      * chunk writes go through the serialized queue so they cannot reorder.
+     *
+     * Each entry carries the app's own standalone declaration
+     * (meta-data com.google.android.wearable.standalone) so the iPhone can
+     * flag apps that work without any phone vs companion-dependent ones.
      */
     private fun sendAppList() {
         scope.launch(Dispatchers.IO) {
@@ -85,7 +90,7 @@ class RemoteTriggerManager(
                     .asSequence()
                     .map { it.activityInfo.packageName to it.loadLabel(pm).toString() }
                     .filter { (pkg, _) -> pkg != context.packageName && seen.add(pkg) }
-                    .map { (pkg, label) -> HealthTlv.AppInfo(pkg, label.ifEmpty { pkg }) }
+                    .map { (pkg, label) -> HealthTlv.AppInfo(pkg, label.ifEmpty { pkg }, isStandalone(pkg)) }
                     .sortedWith(compareBy { it.label.lowercase() })
                     .toList()
             } catch (e: Exception) {
@@ -98,6 +103,13 @@ class RemoteTriggerManager(
                 ble.enqueueWrite(AncsConstants.HEALTH_CONTROL_CHARACTERISTIC_UUID, chunk)
             }
         }
+    }
+
+    private fun isStandalone(pkg: String): Boolean = try {
+        val info = context.packageManager.getApplicationInfo(pkg, android.content.pm.PackageManager.GET_META_DATA)
+        info.metaData?.getBoolean(STANDALONE_METADATA_KEY, false) == true
+    } catch (_: Exception) {
+        false
     }
 
     private fun fire(index: Int) {

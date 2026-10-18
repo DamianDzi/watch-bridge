@@ -109,10 +109,29 @@ enum RemoteTriggerResult: UInt8 {
 }
 
 /// One launchable app on the watch (APP_LIST entries; protocol §Watch app
-/// list) — the picker source for new package triggers.
+/// list) — the picker source for new package triggers. `standalone` mirrors
+/// the app's own declaration (meta-data com.google.android.wearable.standalone):
+/// true = usable without any phone. Decoding tolerates its absence so lists
+/// cached by older app versions still load (refresh re-flags them).
 struct RemoteAppInfo: Equatable, Codable {
     let packageName: String
     let label: String
+    var standalone: Bool
+
+    init(packageName: String, label: String, standalone: Bool = false) {
+        self.packageName = packageName
+        self.label = label
+        self.standalone = standalone
+    }
+
+    private enum CodingKeys: String, CodingKey { case packageName, label, standalone }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        packageName = try c.decode(String.self, forKey: .packageName)
+        label = try c.decode(String.self, forKey: .label)
+        standalone = try c.decodeIfPresent(Bool.self, forKey: .standalone) ?? false
+    }
 }
 
 /// Reassembles paged APP_LIST chunks. Chunk 0 starts a fresh assembly; a
@@ -398,6 +417,7 @@ enum HealthControlCodec {
             for app in entries {
                 w.writeUTF8(app.packageName)
                 w.writeUTF8(app.label)
+                w.writeU8(app.standalone ? 1 : 0)
             }
         }
         return w.data
@@ -460,7 +480,11 @@ enum HealthControlCodec {
                 guard let label = String(data: try r.readBytes(labelLen), encoding: .utf8) else {
                     throw HealthTLVError.badControlMessage
                 }
-                entries.append(RemoteAppInfo(packageName: pkg, label: label))
+                // Standalone byte is REQUIRED (protocol §Watch app list) — an
+                // old-format entry without it is malformed, not defaulted.
+                let standaloneRaw = try r.readU8()
+                guard standaloneRaw <= 1 else { throw HealthTLVError.badControlMessage }
+                entries.append(RemoteAppInfo(packageName: pkg, label: label, standalone: standaloneRaw == 1))
             }
             return .appList(chunkIndex: chunkIndex, isFinal: finalRaw == 1, entries: entries)
         }

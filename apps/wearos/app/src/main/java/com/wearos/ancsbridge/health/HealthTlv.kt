@@ -195,7 +195,7 @@ object HealthTlv {
     data class Trigger(val index: Int, val kind: Int, val payload: String)
 
     /** One launchable app on the watch (APP_LIST entries; see protocol §Watch app list). */
-    data class AppInfo(val packageName: String, val label: String)
+    data class AppInfo(val packageName: String, val label: String, val standalone: Boolean)
 
     // ---- Encoding ----------------------------------------------------------
 
@@ -342,8 +342,9 @@ object HealthTlv {
      * practice).
      */
     fun appListChunks(apps: List<AppInfo>, maxBytes: Int = MAX_APP_LIST_CHUNK_BYTES): List<ByteArray> {
+        // 4 B length fields + strings + 1 B standalone flag
         fun entrySize(app: AppInfo) =
-            4 + app.packageName.toByteArray(Charsets.UTF_8).size + app.label.toByteArray(Charsets.UTF_8).size
+            5 + app.packageName.toByteArray(Charsets.UTF_8).size + app.label.toByteArray(Charsets.UTF_8).size
 
         val groups = mutableListOf<List<AppInfo>>()
         var current = mutableListOf<AppInfo>()
@@ -370,6 +371,7 @@ object HealthTlv {
                     val label = it.label.toByteArray(Charsets.UTF_8)
                     u16(pkg.size); bytes(pkg)
                     u16(label.size); bytes(label)
+                    u8(if (it.standalone) 1 else 0)
                 }
             }.toByteArray()
         }
@@ -455,7 +457,8 @@ object HealthTlv {
                     val pkg = String(r.bytes(pkgLen), Charsets.UTF_8)
                     val labelLen = r.u16()
                     val label = String(r.bytes(labelLen), Charsets.UTF_8)
-                    entries += AppInfo(pkg, label)
+                    val standalone = r.u8() != 0
+                    entries += AppInfo(pkg, label, standalone)
                 }
                 ControlMessage.AppList(chunkIndex, isFinal, entries)
             }
