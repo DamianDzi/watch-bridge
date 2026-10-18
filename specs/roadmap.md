@@ -17,6 +17,8 @@ AC6 reboot reconnect, AC7 battery/48 h.
 - B2 More health types: SpO2, stress, skin temperature, respiratory rate — protocol types 9–12, additive (iOS ignores unknown types by design)
 - B3 Auto-detected workouts (Health Connect exercise sessions, incl. auto ones)
 - B4 Find-my-phone (custom characteristic → iOS alert sound)
+- B5 Remote intents: iPhone → watch "fire intent / open deep link" control messages (launch apps, trigger quick-log shortcuts in e.g. Baby Daybook)
+- B6 MediaSession read: watch-side now-playing for local watch players (e.g. Spotify standalone) surfaced to iPhone
 
 ## Phase C — polish & reliability
 - C1 iPhone widget + Wear OS tile (watch battery %, sync status, pending records)
