@@ -15,6 +15,8 @@ AC6 reboot reconnect, AC7 battery/48 h.
 ## Phase B — core feature completion
 - B1 AMS media control (T8; watch-side only, no iOS code; the planned greenfield #2)
 - B2 More health types: SpO2, stress, skin temperature, respiratory rate — protocol types 9–12, additive (iOS ignores unknown types by design)
+- B2b Sleep inference from overnight HR stream — DEFERRED by user decision 2026-10-20 (battery prioritized); revisit if OHealth-on-OP12 stops being acceptable
+- B7 Battery optimization — PRIORITIZED 2026-10-20: periodic MeasureClient HR (5 min) instead of continuous passive, heartbeat 60s→180s, Room prune valve
 - B3 Auto-detected workouts (Health Connect exercise sessions, incl. auto ones)
 - B4 Find-my-phone (custom characteristic → iOS alert sound)
 - B5 Remote intents: iPhone → watch "fire intent / open deep link" control messages (launch apps, trigger quick-log shortcuts in e.g. Baby Daybook)
