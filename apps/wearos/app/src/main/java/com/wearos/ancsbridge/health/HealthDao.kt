@@ -76,6 +76,10 @@ interface HealthDao {
 
     @Query("DELETE FROM health_records")
     suspend fun deleteAll()
+
+    /** B7 safety valve: unsent records older than the cutoff can't grow the DB forever. */
+    @Query("DELETE FROM health_records WHERE start_epoch_ms < :cutoffEpochMs")
+    suspend fun deleteOlderThan(cutoffEpochMs: Long): Int
 }
 
 /**

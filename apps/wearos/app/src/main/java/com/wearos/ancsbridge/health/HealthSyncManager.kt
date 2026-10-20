@@ -32,11 +32,11 @@ class HealthSyncManager(
         private const val PREFS = "health_bridge"
         private const val KEY_INSTALL_NONCE = "install_nonce"
 
-        // A5 debounce: a record arriving alone waits at most 30 s; a burst
-        // flushes at 20. Once pumping, ACKs keep the loop draining without
-        // these counters.
+        // A5 debounce (tuned in B7): a record arriving alone waits at most
+        // 120 s; a burst flushes at 20. Once pumping, ACKs keep the loop
+        // draining without these counters.
         private const val PUMP_RECORD_THRESHOLD = 20
-        private const val PUMP_MAX_DELAY_MS = 30_000L
+        private const val PUMP_MAX_DELAY_MS = 120_000L
     }
 
     private var linkReady = false
@@ -86,7 +86,7 @@ class HealthSyncManager(
             val now = System.currentTimeMillis()
             if (firstPendingSignalAt == 0L) firstPendingSignalAt = now
             pendingSignals++
-            if (pendingSignals >= PUMP_RECORD_THRESHOLD || now - firstPendingSignalAt >= PUMP_MAX_DELAY_MS) {
+            if (PumpPolicy.shouldPump(pendingSignals, firstPendingSignalAt, now, PUMP_RECORD_THRESHOLD, PUMP_MAX_DELAY_MS)) {
                 pendingSignals = 0
                 firstPendingSignalAt = 0L
                 pumpIfNeeded()

@@ -42,10 +42,13 @@ class BleConnectionManager(private val context: Context) {
         private const val MAX_WRITE_ATTEMPTS = 5
         private const val WRITE_RETRY_DELAY_MS = 150L
 
-        // Link watchdog (protocol §Link watchdog): PING every 60 s while the
+        // Link watchdog (protocol §Link watchdog): PING every 180 s while the
         // B5 subscription is active; two consecutive unanswered PINGs = zombie
-        // link → force disconnect so the reconnect machinery takes over.
-        private const val PING_INTERVAL_MS = 60_000L
+        // link → hard teardown so the reconnect machinery takes over. B7: the
+        // interval was 60 s — every PING wakes the BLE radio, so the slower
+        // cadence trades zombie-detection latency (~6–9 min instead of ~3)
+        // for battery. Acceptable for a personal tool.
+        private const val PING_INTERVAL_MS = 180_000L
         private const val MAX_MISSED_PONGS = 2
 
         // Control command bytes on B5 (mirrors HealthTlv.CMD_*; local copies
