@@ -1,5 +1,7 @@
 # watch-bridge
 
+[![CI](https://github.com/DamianDzi/watch-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/DamianDzi/watch-bridge/actions/workflows/ci.yml)
+
 **Free, open-source bridge between your Wear OS watch and your iPhone.**
 
 Wear OS watches can't pair with iPhones — Google dropped iOS support at Wear OS 3, and the paid
