@@ -1,3 +1,6 @@
+# watch-bridge — **DELIVERED & PAUSED** (2026-10-25, until further notice)
+
+Resume context: see specs/roadmap.md (phase status at bottom) and project memory. First resume task: verify collector containment on-hardware (DB counts — build deployed 2026-10-22, verification pending).
 # watch-bridge
 
 Personal tool: connect a **OnePlus Watch 3** (Wear OS 5.1) to an **iPhone 16 Pro Max** with no subscription.
