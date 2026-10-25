@@ -230,7 +230,7 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					92B3FE8C95BD8A47F92B4590 = {
-						DevelopmentTeam = RH3T97HUHU;
+						DevelopmentTeam = "";
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -477,7 +477,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = RH3T97HUHU;
+				DEVELOPMENT_TEAM = "";
 				INFOPLIST_FILE = "AncsBridge/Info-Generated.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -500,7 +500,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = RH3T97HUHU;
+				DEVELOPMENT_TEAM = "";
 				INFOPLIST_FILE = "AncsBridge/Info-Generated.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

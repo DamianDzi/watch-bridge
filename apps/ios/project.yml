@@ -34,7 +34,9 @@ targets:
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1"
         CODE_SIGN_ENTITLEMENTS: AncsBridge/AncsBridge.entitlements
-        DEVELOPMENT_TEAM: RH3T97HUHU
+        # Set your own Apple Developer team (Personal Team works); or delete and
+        # pass DEVELOPMENT_TEAM via xcodebuild. Regenerate with: xcodegen generate
+        DEVELOPMENT_TEAM: ""
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS: "YES"
       configs:

@@ -1,6 +1,6 @@
 # watch-bridge — Requirements Spec (Phase 0)
 
-*2026-10-16. Sources: compatibility/feasibility research (2026-10-16), Damian's feature picks, WearBridge upstream docs.*
+*2026-10-16. Sources: compatibility/feasibility research (2026-10-16), the owner's feature picks, WearBridge upstream docs.*
 
 ## Problem
 

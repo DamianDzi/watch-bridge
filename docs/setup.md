@@ -1,6 +1,6 @@
 # watch-bridge — Setup Guide
 
-*DRAFT (2026-10-16): written before first hardware build; steps marked ⚠ are unverified until first install on the OnePlus Watch 3 + iPhone 16 Pro Max.*
+*Written against a OnePlus Watch 3 + iPhone 16 Pro Max (the maintainer's hardware) — most steps are verified there; ⚠ marks anything device-specific that may differ on your watch.*
 
 ## 0. One-time: activate the watch (borrowed Android phone, ~15 min)
 

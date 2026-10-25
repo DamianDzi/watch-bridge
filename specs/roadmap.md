@@ -52,6 +52,8 @@ health types) → C4/A5 (quality of life) → then decide E deliberately.
 Every phase is weekend-scale for a solo dev; nothing here blocks daily use — the bridge already
 delivers its two headline features.
 
-## STATUS: DELIVERED & PAUSED 2026-10-25 (until further notice)
+## STATUS: paused / maintenance-mode (2026-10-25)
+
+The maintainer's device works (see README); development rests between feature waves. PRs are the way forward — see CONTRIBUTING.md.
 
 Live on hardware: notifications (ANCS), health sync HR/steps/battery with offline backfill, remote triggers + app picker with standalone badges, self-healing link watchdog, auto-restart on update. Deferred/paused: B1 AMS media, B2 SpO2/stress/skin-temp, B2b sleep inference (user decision), startup-wedge debug (known issue), AC checklist items (dismiss-sync, call decline, reboot reconnect, 48h battery measurement — informal/user-driven).
